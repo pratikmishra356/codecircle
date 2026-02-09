@@ -1,0 +1,12 @@
+[submodule "services/fixai"]
+	path = services/fixai
+	url = https://github.com/pratikmishra356/fixai.git
+[submodule "services/metrics-explorer"]
+	path = services/metrics-explorer
+	url = https://github.com/pratikmishra356/metrics-explorer.git
+[submodule "services/logs-explorer"]
+	path = services/logs-explorer
+	url = https://github.com/pratikmishra356/logs-explorer.git
+[submodule "services/code-parser"]
+	path = services/code-parser
+	url = https://github.com/pratikmishra356/code-parser.git

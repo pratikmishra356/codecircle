@@ -1,0 +1,35 @@
+@import "tailwindcss";
+
+/* ─── CodeCircle Design Tokens ─────────────────────────────────────── */
+:root {
+  --cc-bg: #0a0a0f;
+  --cc-surface: #12121a;
+  --cc-surface-2: #1a1a26;
+  --cc-surface-3: #222233;
+  --cc-border: #2a2a3d;
+  --cc-border-hover: #3a3a55;
+  --cc-text: #e4e4ef;
+  --cc-text-secondary: #9494ab;
+  --cc-text-muted: #6b6b80;
+  --cc-accent: #6366f1;
+  --cc-accent-hover: #818cf8;
+  --cc-accent-glow: rgba(99, 102, 241, 0.15);
+  --cc-success: #22c55e;
+  --cc-warning: #eab308;
+  --cc-error: #ef4444;
+}
+
+body {
+  margin: 0;
+  background: var(--cc-bg);
+  color: var(--cc-text);
+  font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+/* Custom scrollbar */
+::-webkit-scrollbar { width: 6px; height: 6px; }
+::-webkit-scrollbar-track { background: transparent; }
+::-webkit-scrollbar-thumb { background: var(--cc-border); border-radius: 3px; }
+::-webkit-scrollbar-thumb:hover { background: var(--cc-border-hover); }
