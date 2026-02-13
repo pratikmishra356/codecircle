@@ -17,11 +17,6 @@ export default defineConfig({
         target: 'http://localhost:8200',
         changeOrigin: true,
       },
-      // FixAI API (chat, conversations, organizations)
-      '/api/v1': {
-        target: 'http://localhost:8100',
-        changeOrigin: true,
-      },
     },
   },
 })

@@ -1,8 +1,9 @@
 import { Link, Outlet, useLocation } from 'react-router-dom';
-import { CircleDot, LayoutDashboard } from 'lucide-react';
+import { CircleDot, LayoutDashboard, Settings } from 'lucide-react';
 
 const NAV_ITEMS = [
   { to: '/', icon: LayoutDashboard, label: 'Workspaces' },
+  { to: '/settings', icon: Settings, label: 'AI Settings' },
 ];
 
 export default function Layout() {

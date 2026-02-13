@@ -1,19 +1,8 @@
 /* ── API Client ───────────────────────────────────────────────────── */
 
-import type {
-  AIConfig,
-  CodeConfig,
-  Conversation,
-  ConversationDetail,
-  LogsConfig,
-  MetricsConfig,
-  PlatformHealth,
-  Workspace,
-  WorkspaceListItem,
-} from './types';
+import type { AIConfig, AIConfigUpdate, PlatformHealth, ServiceOrg, Workspace, WorkspaceListItem } from './types';
 
 const PLATFORM = '/api/platform';
-const FIXAI = '/api/v1';
 
 async function request<T>(url: string, init?: RequestInit): Promise<T> {
   const res = await fetch(url, {
@@ -48,64 +37,35 @@ export const platform = {
   deleteWorkspace: (id: string) =>
     request<void>(`${PLATFORM}/workspaces/${id}`, { method: 'DELETE' }),
 
-  // Setup steps
-  saveAI: (id: string, config: AIConfig) =>
-    request<Workspace>(`${PLATFORM}/setup/${id}/ai`, {
-      method: 'PATCH',
-      body: JSON.stringify(config),
-    }),
-
-  saveMetrics: (id: string, config: MetricsConfig) =>
-    request<Workspace>(`${PLATFORM}/setup/${id}/metrics`, {
-      method: 'PATCH',
-      body: JSON.stringify(config),
-    }),
-
-  saveLogs: (id: string, config: LogsConfig) =>
-    request<Workspace>(`${PLATFORM}/setup/${id}/logs`, {
-      method: 'PATCH',
-      body: JSON.stringify(config),
-    }),
-
-  saveCode: (id: string, config: CodeConfig) =>
-    request<Workspace>(`${PLATFORM}/setup/${id}/code`, {
-      method: 'PATCH',
-      body: JSON.stringify(config),
-    }),
-
-  provision: (id: string) =>
-    request<Workspace>(`${PLATFORM}/setup/${id}/provision`, { method: 'POST' }),
-};
-
-/* ── FixAI API ───────────────────────────────────────────────────── */
-
-export const fixai = {
-  createConversation: (orgId: string) =>
-    request<Conversation>(`${FIXAI}/organizations/${orgId}/conversations`, {
+  // Connect / disconnect service orgs
+  connectService: (workspaceId: string, service: string, orgId: string, repoId?: string) =>
+    request<Workspace>(`${PLATFORM}/workspaces/${workspaceId}/connect`, {
       method: 'POST',
-      body: JSON.stringify({}),
+      body: JSON.stringify({ service, org_id: orgId, repo_id: repoId }),
     }),
 
-  listConversations: (orgId: string) =>
-    request<Conversation[]>(`${FIXAI}/organizations/${orgId}/conversations`),
+  disconnectService: (workspaceId: string, service: string) =>
+    request<Workspace>(`${PLATFORM}/workspaces/${workspaceId}/disconnect/${service}`, {
+      method: 'DELETE',
+    }),
 
-  getConversation: (convId: string) =>
-    request<ConversationDetail>(`${FIXAI}/conversations/${convId}`),
+  // List orgs from each service (proxied through platform)
+  listServiceOrgs: (service: string) =>
+    request<ServiceOrg[]>(`${PLATFORM}/services/${service}/orgs`),
 
-  deleteConversation: (convId: string) =>
-    request<void>(`${FIXAI}/conversations/${convId}`, { method: 'DELETE' }),
-
-  // SSE streaming — returns raw Response for manual reading
-  sendMessage: async (convId: string, content: string): Promise<Response> => {
-    const res = await fetch(`${FIXAI}/conversations/${convId}/messages`, {
+  // Create FixAI org from workspace
+  createFixAIOrg: (workspaceId: string, name: string, slug: string) =>
+    request<Workspace>(`${PLATFORM}/workspaces/${workspaceId}/create-fixai-org`, {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ content }),
-    });
-    if (!res.ok) {
-      const text = await res.text().catch(() => res.statusText);
-      throw new Error(`${res.status}: ${text}`);
-    }
-    return res;
-  },
+      body: JSON.stringify({ name, slug }),
+    }),
+
+  // AI Configuration
+  getAIConfig: () => request<AIConfig>(`${PLATFORM}/ai-config`),
+
+  saveAIConfig: (config: AIConfigUpdate) =>
+    request<AIConfig>(`${PLATFORM}/ai-config`, {
+      method: 'PUT',
+      body: JSON.stringify(config),
+    }),
 };

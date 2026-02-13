@@ -13,6 +13,11 @@ class Settings(BaseSettings):
     logs_explorer_url: str = "http://localhost:8003"
     code_parser_url: str = "http://localhost:8000"
 
+    # AI / LLM (seeded into DB on first run)
+    claude_api_key: str = ""
+    claude_bedrock_url: str = ""
+    claude_model_id: str = ""
+
     # Encryption
     encryption_key: str = ""
 

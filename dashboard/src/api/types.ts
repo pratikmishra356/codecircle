@@ -12,27 +12,8 @@ export interface Workspace {
   id: string;
   name: string;
   slug: string;
-  status: 'setup' | 'provisioning' | 'ready' | 'error';
-
-  llm_provider: string | null;
-  llm_model_id: string | null;
-  has_llm_key: boolean;
-
-  metrics_provider: string | null;
-  metrics_endpoint_url: string | null;
-  has_metrics_credentials: boolean;
-
-  logs_provider: string | null;
-  logs_host_url: string | null;
-  has_logs_credentials: boolean;
-
-  code_repo_path: string | null;
-  code_repo_name: string | null;
-
+  status: string;
   service_ids: ServiceIds;
-
-  error_message: string | null;
-
   created_at: string;
   updated_at: string;
 }
@@ -42,11 +23,7 @@ export interface WorkspaceListItem {
   name: string;
   slug: string;
   status: string;
-  llm_provider: string | null;
-  metrics_provider: string | null;
-  logs_provider: string | null;
-  code_repo_name: string | null;
-  error_message: string | null;
+  service_ids: ServiceIds;
   created_at: string;
 }
 
@@ -63,73 +40,85 @@ export interface PlatformHealth {
   services: HealthStatus[];
 }
 
+export interface ServiceOrg {
+  id: string;
+  name: string;
+  slug: string | null;
+  description: string | null;
+}
+
+/* ── AI Config ───────────────────────────────────────────────────── */
+
 export interface AIConfig {
-  llm_provider: 'anthropic' | 'bedrock';
-  llm_api_key?: string;
-  llm_bedrock_url?: string;
-  llm_model_id?: string;
+  provider: string;        // "claude" | "bedrock"
+  api_key_set: boolean;
+  api_key_preview: string | null;
+  base_url: string | null;
+  model_id: string | null;
+  max_tokens: number;
+  updated_at: string | null;
 }
 
-export interface MetricsConfig {
-  provider: 'datadog' | 'prometheus' | 'grafana';
-  api_key?: string;
-  app_key?: string;
-  site?: string;
-  endpoint_url?: string;
-  bearer_token?: string;
-  username?: string;
-  password?: string;
+export interface AIConfigUpdate {
+  provider: string;
+  api_key?: string | null;
+  base_url?: string | null;
+  model_id?: string | null;
+  max_tokens?: number;
 }
 
-export interface LogsConfig {
-  provider: 'splunk_cloud';
-  host_url: string;
-  cookie?: string;
-  csrf_token?: string;
-}
+/* ── Service Info ────────────────────────────────────────────────── */
 
-export interface CodeConfig {
-  repo_path: string;
-  repo_name?: string;
-}
-
-export interface SetupWizardRequest {
+export interface ServiceInfo {
+  key: string;
   name: string;
-  slug: string;
-  ai?: AIConfig;
-  metrics?: MetricsConfig;
-  logs?: LogsConfig;
-  code?: CodeConfig;
+  description: string;
+  backendPort: number;
+  frontendPort: number;
+  serviceIdField: keyof ServiceIds;
+  icon: string;
+  color: string;
 }
 
-/* ── Chat Types (FixAI) ──────────────────────────────────────────── */
-
-export interface Conversation {
-  id: string;
-  title: string | null;
-  created_at: string;
-  updated_at: string;
-  message_count: number;
-}
-
-export interface Message {
-  id: string;
-  role: 'user' | 'assistant';
-  content: string;
-  tool_calls?: ToolCall[];
-  created_at: string;
-}
-
-export interface ToolCall {
-  name: string;
-  args: Record<string, unknown>;
-  result?: string;
-}
-
-export interface ConversationDetail {
-  id: string;
-  title: string | null;
-  organization_id: string;
-  messages: Message[];
-  created_at: string;
-}
+export const SERVICES: ServiceInfo[] = [
+  {
+    key: 'fixai',
+    name: 'FixAI',
+    description: 'AI-powered debugging agent with chat interface',
+    backendPort: 8100,
+    frontendPort: 3006,
+    serviceIdField: 'fixai_org_id',
+    icon: 'Bot',
+    color: '#8b5cf6',
+  },
+  {
+    key: 'metrics',
+    name: 'Metrics Explorer',
+    description: 'Query dashboards, monitors, and metrics from Datadog, Prometheus, or Grafana',
+    backendPort: 8001,
+    frontendPort: 3002,
+    serviceIdField: 'metrics_org_id',
+    icon: 'BarChart3',
+    color: '#06b6d4',
+  },
+  {
+    key: 'logs',
+    name: 'Logs Explorer',
+    description: 'Search and analyze production logs from Splunk Cloud',
+    backendPort: 8003,
+    frontendPort: 3003,
+    serviceIdField: 'logs_org_id',
+    icon: 'ScrollText',
+    color: '#f59e0b',
+  },
+  {
+    key: 'code_parser',
+    name: 'Code Parser',
+    description: 'Parse repositories, explore symbols, call graphs, and entry points',
+    backendPort: 8000,
+    frontendPort: 3000,
+    serviceIdField: 'code_parser_org_id',
+    icon: 'Code2',
+    color: '#10b981',
+  },
+];

@@ -5,10 +5,9 @@ from contextlib import asynccontextmanager
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
+from app.api.ai_settings import router as ai_settings_router
 from app.api.health import router as health_router
-from app.api.setup import router as setup_router
 from app.api.workspaces import router as workspaces_router
-from app.config import settings
 from app.database import init_db
 
 
@@ -21,11 +20,11 @@ async def lifespan(app: FastAPI):
 app = FastAPI(
     title="CodeCircle Platform",
     description="Unified orchestrator for FixAI, Metrics Explorer, Logs Explorer, and Code Parser",
-    version="0.1.0",
+    version="0.2.0",
     lifespan=lifespan,
 )
 
-# CORS — allow dashboard origin in development
+# CORS — allow dashboard and service frontends in development
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["*"],
@@ -36,5 +35,5 @@ app.add_middleware(
 
 # Routes
 app.include_router(health_router)
+app.include_router(ai_settings_router)
 app.include_router(workspaces_router)
-app.include_router(setup_router)

@@ -1,20 +1,31 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useState, useCallback } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import {
   ArrowLeft,
-  MessageSquare,
   Bot,
   BarChart3,
   ScrollText,
   Code2,
+  ExternalLink,
+  Link2,
+  Unlink,
   CheckCircle2,
   XCircle,
-  Settings,
-  RefreshCw,
-  AlertCircle,
+  ChevronDown,
+  MessageSquare,
+  Loader2,
+  Plus,
 } from 'lucide-react';
 import { platform } from '../api/client';
-import type { Workspace, PlatformHealth } from '../api/types';
+import type { Workspace, PlatformHealth, ServiceOrg, ServiceInfo } from '../api/types';
+import { SERVICES } from '../api/types';
+
+const ICON_MAP: Record<string, React.ReactNode> = {
+  Bot: <Bot size={20} />,
+  BarChart3: <BarChart3 size={20} />,
+  ScrollText: <ScrollText size={20} />,
+  Code2: <Code2 size={20} />,
+};
 
 export default function WorkspaceDashboard() {
   const { workspaceId } = useParams<{ workspaceId: string }>();
@@ -32,6 +43,12 @@ export default function WorkspaceDashboard() {
     ]).finally(() => setLoading(false));
   }, [workspaceId]);
 
+  const refreshWorkspace = useCallback(async () => {
+    if (!workspaceId) return;
+    const ws = await platform.getWorkspace(workspaceId);
+    setWorkspace(ws);
+  }, [workspaceId]);
+
   if (loading || !workspace) {
     return (
       <div className="flex items-center justify-center h-96" style={{ color: 'var(--cc-text-muted)' }}>
@@ -42,6 +59,13 @@ export default function WorkspaceDashboard() {
 
   const serviceHealth = (name: string) =>
     health?.services.find((s) => s.service === name);
+
+  const connectedCount = [
+    workspace.service_ids.fixai_org_id,
+    workspace.service_ids.metrics_org_id,
+    workspace.service_ids.logs_org_id,
+    workspace.service_ids.code_parser_org_id,
+  ].filter(Boolean).length;
 
   return (
     <div className="max-w-5xl mx-auto px-6 py-10">
@@ -54,272 +78,396 @@ export default function WorkspaceDashboard() {
         <ArrowLeft size={14} /> All Workspaces
       </button>
 
-      <div className="flex items-center justify-between mb-8">
-        <div>
-          <h1 className="text-2xl font-bold" style={{ color: 'var(--cc-text)' }}>
-            {workspace.name}
-          </h1>
-          <p className="text-sm mt-1" style={{ color: 'var(--cc-text-muted)' }}>
-            Status: <span style={{
-              color: workspace.status === 'ready' ? 'var(--cc-success)' : workspace.status === 'error' ? 'var(--cc-error)' : 'var(--cc-warning)',
-            }}>
-              {workspace.status}
-            </span>
-          </p>
-        </div>
-        <div className="flex items-center gap-3">
+      <div className="flex items-center justify-between mb-2">
+        <h1 className="text-2xl font-bold" style={{ color: 'var(--cc-text)' }}>
+          {workspace.name}
+        </h1>
+        {workspace.service_ids.fixai_org_id && (
           <button
-            onClick={() => navigate(`/setup/${workspaceId}`)}
-            className="flex items-center gap-1.5 px-3 py-2 rounded-lg text-sm cursor-pointer border"
-            style={{ background: 'transparent', borderColor: 'var(--cc-border)', color: 'var(--cc-text-secondary)' }}
-          >
-            <Settings size={14} /> Configure
-          </button>
-          <button
-            onClick={() => navigate(`/workspace/${workspaceId}/chat`)}
+            onClick={() => navigate(`/workspace/${workspaceId}/debug`)}
             className="flex items-center gap-2 px-5 py-2.5 rounded-lg text-sm font-semibold cursor-pointer border-0"
             style={{ background: 'var(--cc-accent)', color: '#fff' }}
           >
             <MessageSquare size={16} /> Start Debugging
           </button>
-        </div>
+        )}
       </div>
 
-      {workspace.status === 'error' && workspace.error_message && (
-        <div
-          className="mb-6 px-4 py-3 rounded-lg flex items-start gap-2"
-          style={{ background: 'rgba(239,68,68,0.1)', color: 'var(--cc-error)' }}
-        >
-          <AlertCircle size={18} className="shrink-0 mt-0.5" />
-          <div>
-            <div className="text-sm font-medium">Provisioning had errors</div>
-            <div className="text-xs mt-1 opacity-90">{workspace.error_message}</div>
-            <p className="text-xs mt-2 opacity-80">
-              You can still use the workspace for services that succeeded. Fix the failing service and click Re-provision below, or edit configuration and try again.
-            </p>
-          </div>
-        </div>
-      )}
+      <p className="text-sm mb-8" style={{ color: 'var(--cc-text-muted)' }}>
+        {connectedCount}/4 services connected. Open each service below to create organizations,
+        then connect them to this workspace.
+      </p>
 
-      {/* Service Cards Grid */}
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-8">
-        {/* AI Agent */}
-        <ServiceCard
-          icon={<Bot size={20} />}
-          title="AI Agent"
-          subtitle={workspace.llm_provider === 'anthropic' ? 'Anthropic Claude' : 'AWS Bedrock'}
-          configured={workspace.has_llm_key}
-          healthy={serviceHealth('FixAI')?.healthy}
-          latency={serviceHealth('FixAI')?.latency_ms}
-          details={[
-            { label: 'Provider', value: workspace.llm_provider || 'Not set' },
-            { label: 'Model', value: workspace.llm_model_id || 'Default' },
-            { label: 'API Key', value: workspace.has_llm_key ? '••••••••' : 'Not configured' },
-          ]}
-        />
-
-        {/* Metrics */}
-        <ServiceCard
-          icon={<BarChart3 size={20} />}
-          title="Metrics Explorer"
-          subtitle={workspace.metrics_provider ? workspace.metrics_provider.charAt(0).toUpperCase() + workspace.metrics_provider.slice(1) : 'Not configured'}
-          configured={workspace.has_metrics_credentials}
-          healthy={serviceHealth('Metrics Explorer')?.healthy}
-          latency={serviceHealth('Metrics Explorer')?.latency_ms}
-          details={[
-            { label: 'Provider', value: workspace.metrics_provider || 'None' },
-            { label: 'Endpoint', value: workspace.metrics_endpoint_url || 'Default' },
-            { label: 'Credentials', value: workspace.has_metrics_credentials ? '••••••••' : 'Not set' },
-          ]}
-        />
-
-        {/* Logs */}
-        <ServiceCard
-          icon={<ScrollText size={20} />}
-          title="Logs Explorer"
-          subtitle={workspace.logs_provider || 'Not configured'}
-          configured={workspace.has_logs_credentials}
-          healthy={serviceHealth('Logs Explorer')?.healthy}
-          latency={serviceHealth('Logs Explorer')?.latency_ms}
-          details={[
-            { label: 'Provider', value: workspace.logs_provider || 'None' },
-            { label: 'Host', value: workspace.logs_host_url || 'Not set' },
-            { label: 'Credentials', value: workspace.has_logs_credentials ? '••••••••' : 'Not set' },
-          ]}
-        />
-
-        {/* Code */}
-        <ServiceCard
-          icon={<Code2 size={20} />}
-          title="Code Parser"
-          subtitle={workspace.code_repo_name || 'Not configured'}
-          configured={!!workspace.code_repo_path}
-          healthy={serviceHealth('Code Parser')?.healthy}
-          latency={serviceHealth('Code Parser')?.latency_ms}
-          details={[
-            { label: 'Repository', value: workspace.code_repo_name || 'None' },
-            { label: 'Path', value: workspace.code_repo_path || 'Not set' },
-            { label: 'Repo ID', value: workspace.service_ids.code_parser_repo_id || 'Pending' },
-          ]}
-        />
-      </div>
-
-      {/* Quick Actions */}
-      <h2 className="text-lg font-semibold mb-4" style={{ color: 'var(--cc-text)' }}>
-        Quick Actions
-      </h2>
-      <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
-        <QuickAction
-          icon={<MessageSquare size={18} />}
-          label="New Debug Session"
-          description="Start an AI-powered debugging conversation"
-          onClick={() => navigate(`/workspace/${workspaceId}/chat`)}
-          primary
-        />
-        <QuickAction
-          icon={<RefreshCw size={18} />}
-          label="Re-provision"
-          description="Re-run provisioning for all services"
-          onClick={async () => {
-            if (workspaceId) {
-              try {
-                const ws = await platform.provision(workspaceId);
-                setWorkspace(ws);
-              } catch (e: any) {
-                alert(e.message);
-              }
-            }
-          }}
-        />
-        <QuickAction
-          icon={<Settings size={18} />}
-          label="Edit Configuration"
-          description="Update credentials and provider settings"
-          onClick={() => navigate(`/setup/${workspaceId}`)}
-        />
-      </div>
-    </div>
-  );
-}
-
-/* ── Sub-components ──────────────────────────────────────────────── */
-
-function ServiceCard({
-  icon,
-  title,
-  subtitle,
-  configured,
-  healthy,
-  latency,
-  details,
-}: {
-  icon: React.ReactNode;
-  title: string;
-  subtitle: string;
-  configured: boolean;
-  healthy?: boolean;
-  latency?: number | null;
-  details: { label: string; value: string }[];
-}) {
-  return (
-    <div
-      className="rounded-lg border p-5"
-      style={{ background: 'var(--cc-surface)', borderColor: 'var(--cc-border)' }}
-    >
-      <div className="flex items-center justify-between mb-4">
-        <div className="flex items-center gap-3">
-          <div
-            className="w-9 h-9 rounded-lg flex items-center justify-center"
-            style={{ background: 'var(--cc-accent-glow)', color: 'var(--cc-accent)' }}
-          >
-            {icon}
-          </div>
-          <div>
-            <div className="text-sm font-semibold" style={{ color: 'var(--cc-text)' }}>
-              {title}
-            </div>
-            <div className="text-xs" style={{ color: 'var(--cc-text-muted)' }}>
-              {subtitle}
-            </div>
-          </div>
-        </div>
-        <div className="flex items-center gap-2">
-          {healthy !== undefined && (
-            <div className="flex items-center gap-1">
-              {healthy ? (
-                <CheckCircle2 size={14} style={{ color: 'var(--cc-success)' }} />
-              ) : (
-                <XCircle size={14} style={{ color: 'var(--cc-error)' }} />
-              )}
-              {latency != null && (
-                <span className="text-xs" style={{ color: 'var(--cc-text-muted)' }}>
-                  {latency}ms
-                </span>
-              )}
-            </div>
-          )}
-          {configured ? (
-            <span
-              className="text-xs px-2 py-0.5 rounded-full"
-              style={{ background: 'rgba(34,197,94,0.1)', color: 'var(--cc-success)' }}
-            >
-              Connected
-            </span>
-          ) : (
-            <span
-              className="text-xs px-2 py-0.5 rounded-full"
-              style={{ background: 'var(--cc-surface-3)', color: 'var(--cc-text-muted)' }}
-            >
-              Not configured
-            </span>
-          )}
-        </div>
-      </div>
-      <div className="space-y-2">
-        {details.map((d) => (
-          <div key={d.label} className="flex items-center justify-between text-xs">
-            <span style={{ color: 'var(--cc-text-muted)' }}>{d.label}</span>
-            <span className="font-mono truncate max-w-[200px]" style={{ color: 'var(--cc-text-secondary)' }}>
-              {d.value}
-            </span>
-          </div>
+      {/* Service Cards */}
+      <div className="space-y-4 mb-10">
+        {SERVICES.map((svc) => (
+          <ServiceSection
+            key={svc.key}
+            svc={svc}
+            workspace={workspace}
+            health={serviceHealth(svc.name)}
+            workspaceId={workspaceId!}
+            onUpdate={refreshWorkspace}
+            onOpenUI={() => navigate(`/workspace/${workspaceId}/service/${svc.key}`)}
+          />
         ))}
       </div>
     </div>
   );
 }
 
-function QuickAction({
-  icon,
-  label,
-  description,
-  onClick,
-  primary = false,
+/* ── Service Section Card ────────────────────────────────────────── */
+
+function ServiceSection({
+  svc,
+  workspace,
+  health,
+  workspaceId,
+  onUpdate,
+  onOpenUI,
 }: {
-  icon: React.ReactNode;
-  label: string;
-  description: string;
-  onClick: () => void;
-  primary?: boolean;
+  svc: ServiceInfo;
+  workspace: Workspace;
+  health?: { healthy: boolean; latency_ms: number | null };
+  workspaceId: string;
+  onUpdate: () => Promise<void>;
+  onOpenUI: () => void;
 }) {
+  const linkedOrgId = workspace.service_ids[svc.serviceIdField];
+  const [orgs, setOrgs] = useState<ServiceOrg[]>([]);
+  const [loadingOrgs, setLoadingOrgs] = useState(false);
+  const [showPicker, setShowPicker] = useState(false);
+  const [connecting, setConnecting] = useState(false);
+
+  // FixAI create-org form state
+  const [showCreateForm, setShowCreateForm] = useState(false);
+  const [createName, setCreateName] = useState('');
+  const [createSlug, setCreateSlug] = useState('');
+  const [creating, setCreating] = useState(false);
+  const [createError, setCreateError] = useState('');
+
+  const isFixAI = svc.key === 'fixai';
+
+  // Check if other services are connected (needed to enable FixAI org creation)
+  const otherServicesConnected = [
+    workspace.service_ids.code_parser_org_id,
+    workspace.service_ids.metrics_org_id,
+    workspace.service_ids.logs_org_id,
+  ].filter(Boolean).length;
+
+  async function loadOrgs() {
+    setLoadingOrgs(true);
+    try {
+      const data = await platform.listServiceOrgs(svc.key);
+      setOrgs(data);
+    } catch {
+      setOrgs([]);
+    } finally {
+      setLoadingOrgs(false);
+    }
+  }
+
+  function togglePicker() {
+    if (!showPicker) {
+      loadOrgs();
+    }
+    setShowPicker(!showPicker);
+    setShowCreateForm(false);
+  }
+
+  async function handleConnect(orgId: string) {
+    setConnecting(true);
+    try {
+      await platform.connectService(workspaceId, svc.key, orgId);
+      await onUpdate();
+      setShowPicker(false);
+    } catch (e: any) {
+      alert(e.message);
+    } finally {
+      setConnecting(false);
+    }
+  }
+
+  async function handleDisconnect() {
+    try {
+      await platform.disconnectService(workspaceId, svc.key);
+      await onUpdate();
+    } catch (e: any) {
+      alert(e.message);
+    }
+  }
+
+  async function handleCreateFixAIOrg() {
+    if (!createName.trim() || !createSlug.trim()) return;
+    setCreating(true);
+    setCreateError('');
+    try {
+      await platform.createFixAIOrg(workspaceId, createName.trim(), createSlug.trim());
+      await onUpdate();
+      setShowCreateForm(false);
+      setCreateName('');
+      setCreateSlug('');
+    } catch (e: any) {
+      setCreateError(e.message || 'Failed to create FixAI org');
+    } finally {
+      setCreating(false);
+    }
+  }
+
+  function autoSlug(name: string) {
+    setCreateName(name);
+    setCreateSlug(
+      name
+        .toLowerCase()
+        .replace(/[^a-z0-9]+/g, '-')
+        .replace(/^-|-$/g, '')
+    );
+  }
+
   return (
-    <button
-      onClick={onClick}
-      className="flex items-start gap-3 p-4 rounded-lg border text-left cursor-pointer transition-all hover:scale-[1.01]"
-      style={{
-        background: primary ? 'var(--cc-accent-glow)' : 'var(--cc-surface)',
-        borderColor: primary ? 'var(--cc-accent)' : 'var(--cc-border)',
-      }}
+    <div
+      className="rounded-lg border overflow-hidden"
+      style={{ background: 'var(--cc-surface)', borderColor: 'var(--cc-border)' }}
     >
-      <div style={{ color: primary ? 'var(--cc-accent)' : 'var(--cc-text-secondary)' }}>{icon}</div>
-      <div>
-        <div className="text-sm font-medium" style={{ color: 'var(--cc-text)' }}>
-          {label}
+      {/* Card header */}
+      <div className="flex items-center justify-between p-5">
+        <div className="flex items-center gap-3">
+          <div
+            className="w-10 h-10 rounded-lg flex items-center justify-center"
+            style={{ background: `${svc.color}15`, color: svc.color }}
+          >
+            {ICON_MAP[svc.icon]}
+          </div>
+          <div>
+            <div className="flex items-center gap-2">
+              <span className="text-sm font-semibold" style={{ color: 'var(--cc-text)' }}>
+                {svc.name}
+              </span>
+              {health && (
+                health.healthy ? (
+                  <CheckCircle2 size={14} style={{ color: 'var(--cc-success)' }} />
+                ) : (
+                  <XCircle size={14} style={{ color: 'var(--cc-error)' }} />
+                )
+              )}
+              {health?.latency_ms != null && (
+                <span className="text-xs" style={{ color: 'var(--cc-text-muted)' }}>
+                  {health.latency_ms}ms
+                </span>
+              )}
+            </div>
+            <span className="text-xs" style={{ color: 'var(--cc-text-muted)' }}>
+              {svc.description}
+            </span>
+          </div>
         </div>
-        <div className="text-xs mt-0.5" style={{ color: 'var(--cc-text-muted)' }}>
-          {description}
+
+        <div className="flex items-center gap-2">
+          {linkedOrgId ? (
+            <span
+              className="text-xs px-2.5 py-1 rounded-full"
+              style={{ background: 'rgba(34,197,94,0.1)', color: 'var(--cc-success)' }}
+            >
+              Connected
+            </span>
+          ) : (
+            <span
+              className="text-xs px-2.5 py-1 rounded-full"
+              style={{ background: 'var(--cc-surface-3)', color: 'var(--cc-text-muted)' }}
+            >
+              Not connected
+            </span>
+          )}
         </div>
       </div>
-    </button>
+
+      {/* Actions row */}
+      <div
+        className="flex items-center gap-2 px-5 py-3 border-t"
+        style={{ borderColor: 'var(--cc-border)', background: 'var(--cc-surface-2)' }}
+      >
+        {/* Open UI button */}
+        <button
+          onClick={onOpenUI}
+          className="flex items-center gap-1.5 px-3 py-1.5 rounded-md text-xs font-medium cursor-pointer border"
+          style={{ background: 'transparent', borderColor: 'var(--cc-border)', color: 'var(--cc-text-secondary)' }}
+        >
+          <ExternalLink size={12} /> Open {svc.name} UI
+        </button>
+
+        {/* Connect / Disconnect */}
+        {linkedOrgId ? (
+          <>
+            <span className="text-xs font-mono px-2 truncate max-w-[200px]" style={{ color: 'var(--cc-text-muted)' }}>
+              Org: {linkedOrgId.slice(0, 8)}...
+            </span>
+            <button
+              onClick={handleDisconnect}
+              className="flex items-center gap-1 px-2 py-1.5 rounded-md text-xs cursor-pointer border-0"
+              style={{ background: 'transparent', color: 'var(--cc-error)' }}
+              title="Disconnect this organization"
+            >
+              <Unlink size={12} /> Disconnect
+            </button>
+          </>
+        ) : (
+          <>
+            {/* For FixAI: show Create button (primary action) */}
+            {isFixAI && (
+              <button
+                onClick={() => { setShowCreateForm(!showCreateForm); setShowPicker(false); }}
+                disabled={otherServicesConnected === 0}
+                className="flex items-center gap-1.5 px-3 py-1.5 rounded-md text-xs font-medium cursor-pointer border"
+                style={{
+                  background: showCreateForm ? 'var(--cc-accent)' : 'transparent',
+                  borderColor: showCreateForm ? 'var(--cc-accent)' : svc.color,
+                  color: showCreateForm ? '#fff' : svc.color,
+                  opacity: otherServicesConnected === 0 ? 0.5 : 1,
+                  cursor: otherServicesConnected === 0 ? 'not-allowed' : 'pointer',
+                }}
+                title={otherServicesConnected === 0 ? 'Connect at least one other service first' : 'Create a new FixAI org with service details pre-filled'}
+              >
+                <Plus size={12} /> Create FixAI Org
+              </button>
+            )}
+
+            {/* Connect existing org button */}
+            <button
+              onClick={togglePicker}
+              className="flex items-center gap-1.5 px-3 py-1.5 rounded-md text-xs font-medium cursor-pointer border"
+              style={{
+                background: showPicker ? 'var(--cc-accent-glow)' : 'transparent',
+                borderColor: showPicker ? 'var(--cc-accent)' : 'var(--cc-border)',
+                color: showPicker ? 'var(--cc-accent)' : 'var(--cc-text-secondary)',
+              }}
+            >
+              <Link2 size={12} /> Connect Existing <ChevronDown size={12} />
+            </button>
+          </>
+        )}
+      </div>
+
+      {/* FixAI create-org form */}
+      {isFixAI && showCreateForm && !linkedOrgId && (
+        <div className="px-5 py-4 border-t" style={{ borderColor: 'var(--cc-border)' }}>
+          <div className="text-xs font-medium mb-3" style={{ color: 'var(--cc-text-secondary)' }}>
+            Create a new FixAI organization (service URLs and org IDs will be populated from connected services)
+          </div>
+
+          {/* Connected services summary */}
+          <div
+            className="rounded-md px-3 py-2 mb-3 text-xs"
+            style={{ background: 'var(--cc-surface-2)', color: 'var(--cc-text-muted)' }}
+          >
+            <div className="font-medium mb-1" style={{ color: 'var(--cc-text-secondary)' }}>
+              Will include:
+            </div>
+            <div className="space-y-0.5">
+              <div>{workspace.service_ids.code_parser_org_id ? '  Code Parser' : '  Code Parser (not connected)'}</div>
+              <div>{workspace.service_ids.metrics_org_id ? '  Metrics Explorer' : '  Metrics Explorer (not connected)'}</div>
+              <div>{workspace.service_ids.logs_org_id ? '  Logs Explorer' : '  Logs Explorer (not connected)'}</div>
+            </div>
+          </div>
+
+          <div className="flex gap-2 mb-2">
+            <input
+              type="text"
+              placeholder="Organization name"
+              value={createName}
+              onChange={(e) => autoSlug(e.target.value)}
+              className="flex-1 px-3 py-2 rounded-md text-xs border"
+              style={{
+                background: 'var(--cc-surface)',
+                borderColor: 'var(--cc-border)',
+                color: 'var(--cc-text)',
+                outline: 'none',
+              }}
+            />
+            <input
+              type="text"
+              placeholder="slug"
+              value={createSlug}
+              onChange={(e) => setCreateSlug(e.target.value)}
+              className="w-40 px-3 py-2 rounded-md text-xs border font-mono"
+              style={{
+                background: 'var(--cc-surface)',
+                borderColor: 'var(--cc-border)',
+                color: 'var(--cc-text)',
+                outline: 'none',
+              }}
+            />
+          </div>
+
+          {createError && (
+            <div className="text-xs mb-2" style={{ color: 'var(--cc-error)' }}>
+              {createError}
+            </div>
+          )}
+
+          <button
+            onClick={handleCreateFixAIOrg}
+            disabled={creating || !createName.trim() || !createSlug.trim()}
+            className="flex items-center gap-1.5 px-4 py-2 rounded-md text-xs font-semibold cursor-pointer border-0"
+            style={{
+              background: 'var(--cc-accent)',
+              color: '#fff',
+              opacity: creating || !createName.trim() || !createSlug.trim() ? 0.5 : 1,
+            }}
+          >
+            {creating ? (
+              <><Loader2 size={12} className="animate-spin" /> Creating...</>
+            ) : (
+              <><Plus size={12} /> Create & Connect</>
+            )}
+          </button>
+        </div>
+      )}
+
+      {/* Org picker dropdown */}
+      {showPicker && (
+        <div className="px-5 py-4 border-t" style={{ borderColor: 'var(--cc-border)' }}>
+          {loadingOrgs ? (
+            <div className="flex items-center gap-2 text-xs py-2" style={{ color: 'var(--cc-text-muted)' }}>
+              <Loader2 size={14} className="animate-spin" /> Loading organizations...
+            </div>
+          ) : orgs.length === 0 ? (
+            <div className="text-xs py-2" style={{ color: 'var(--cc-text-muted)' }}>
+              No organizations found. {isFixAI ? 'Use "Create FixAI Org" above to create one.' : `Open the ${svc.name} UI to create one first.`}
+            </div>
+          ) : (
+            <div className="space-y-1">
+              <div className="text-xs font-medium mb-2" style={{ color: 'var(--cc-text-secondary)' }}>
+                Select an organization to connect:
+              </div>
+              {orgs.map((org) => (
+                <button
+                  key={org.id}
+                  onClick={() => handleConnect(org.id)}
+                  disabled={connecting}
+                  className="w-full flex items-center justify-between px-3 py-2.5 rounded-md text-sm cursor-pointer border transition-colors hover:scale-[1.002]"
+                  style={{
+                    background: 'var(--cc-surface)',
+                    borderColor: 'var(--cc-border)',
+                    color: 'var(--cc-text)',
+                  }}
+                >
+                  <div>
+                    <div className="font-medium text-xs">{org.name}</div>
+                    {org.slug && (
+                      <div className="text-xs font-mono" style={{ color: 'var(--cc-text-muted)' }}>
+                        {org.slug}
+                      </div>
+                    )}
+                  </div>
+                  <span className="text-xs font-mono" style={{ color: 'var(--cc-text-muted)' }}>
+                    {org.id.slice(0, 8)}...
+                  </span>
+                </button>
+              ))}
+            </div>
+          )}
+        </div>
+      )}
+    </div>
   );
 }

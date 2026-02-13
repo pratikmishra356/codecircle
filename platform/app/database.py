@@ -15,6 +15,10 @@ class Base(DeclarativeBase):
 
 async def init_db():
     """Create all tables (dev convenience — use Alembic in production)."""
+    # Import models so Base.metadata knows about them
+    import app.models.ai_config  # noqa: F401
+    import app.models.workspace  # noqa: F401
+
     async with engine.begin() as conn:
         await conn.run_sync(Base.metadata.create_all)
 
