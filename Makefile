@@ -1,4 +1,4 @@
-.PHONY: help up down build logs setup dev clean status
+.PHONY: help up down build logs setup dev clean status ensure-dbs
 
 # ─── Defaults ────────────────────────────────────────────────────────
 SHELL := /bin/bash
@@ -56,7 +56,13 @@ CLAUDE_API_KEY ?= $(shell grep '^CLAUDE_API_KEY=' .env 2>/dev/null | cut -d= -f2
 CLAUDE_BEDROCK_URL ?= $(shell grep '^CLAUDE_BEDROCK_URL=' .env 2>/dev/null | cut -d= -f2-)
 CLAUDE_MODEL_ID ?= $(shell grep '^CLAUDE_MODEL_ID=' .env 2>/dev/null | cut -d= -f2-)
 
-dev: ## Start all backends + all frontends locally for development
+# Ensure PostgreSQL databases exist (create if missing; idempotent)
+ensure-dbs:
+	@for db in codecircle fixai code_parser metrics_explorer logs_explorer; do \
+	  PGDATABASE=postgres psql -U postgres -tc "SELECT 1 FROM pg_database WHERE datname = '$$db'" | grep -q 1 || (createdb -U postgres "$$db" 2>/dev/null && echo "Created database $$db" || true); \
+	done
+
+dev: ensure-dbs migrate ## Start all backends + all frontends locally for development
 	@echo "Starting local development servers..."
 	@echo "Make sure PostgreSQL is running on localhost:5432"
 	@echo ""
@@ -99,7 +105,7 @@ dev: ## Start all backends + all frontends locally for development
 	( cd dashboard && npm run dev ) & \
 	wait
 
-dev-backends: ## Start only backend services (no frontends)
+dev-backends: ensure-dbs ## Start only backend services (no frontends)
 	@echo "Starting backend services only..."
 	@trap 'kill 0' EXIT; \
 	( cd services/code-parser && source venv/bin/activate && \
@@ -122,8 +128,8 @@ dev-backends: ## Start only backend services (no frontends)
 	( cd dashboard && npm run dev ) & \
 	wait
 
-migrate: ## Run database migrations for all services
+migrate: ## Run database migrations for all services (idempotent)
 	@echo "Running migrations..."
-	cd services/code-parser && source venv/bin/activate && alembic upgrade head
-	cd services/metrics-explorer && source venv/bin/activate && alembic upgrade head
-	cd services/logs-explorer/backend && source venv/bin/activate && PYTHONPATH=. alembic upgrade head
+	@(cd services/code-parser && source venv/bin/activate && export DATABASE_URL="$(PG_URL)/code_parser" && alembic upgrade head) && echo "  code-parser OK" || echo "  code-parser failed"
+	@(cd services/metrics-explorer && source venv/bin/activate && export DATABASE_URL="$(PG_URL)/metrics_explorer" && alembic upgrade head) && echo "  metrics-explorer OK" || echo "  metrics-explorer failed"
+	@(cd services/logs-explorer/backend && source venv/bin/activate && export DATABASE_URL="$(PG_URL)/logs_explorer" && PYTHONPATH=. alembic upgrade head) && echo "  logs-explorer OK" || echo "  logs-explorer failed"
