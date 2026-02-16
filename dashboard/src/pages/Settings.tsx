@@ -94,57 +94,42 @@ export default function Settings() {
   }
 
   return (
-    <div className="max-w-3xl mx-auto px-6 py-10">
-      {/* Header */}
+    <div className="max-w-3xl mx-auto px-6 py-10 pb-20">
       <button
         onClick={() => navigate('/')}
-        className="flex items-center gap-1 text-sm mb-4 cursor-pointer border-0 bg-transparent"
+        className="flex items-center gap-1.5 text-sm mb-6 cursor-pointer border-0 bg-transparent font-medium hover:opacity-80"
         style={{ color: 'var(--cc-text-muted)' }}
       >
-        <ArrowLeft size={14} /> Back to Workspaces
+        <ArrowLeft size={14} /> Workspaces
       </button>
 
-      <h1 className="text-2xl font-bold mb-2" style={{ color: 'var(--cc-text)' }}>
-        AI Configuration
+      <h1 className="text-2xl font-bold tracking-tight mb-2" style={{ color: 'var(--cc-text)' }}>
+        Global AI (default)
       </h1>
       <p className="text-sm mb-8" style={{ color: 'var(--cc-text-secondary)' }}>
-        Configure AI / LLM settings used by <strong>FixAI</strong> and <strong>Code Parser</strong>.
-        Set it once here — both services share this configuration.
+        Default for new workspaces. Override per workspace on its page.
       </p>
 
-      {/* Info banner */}
-      <div
-        className="flex items-start gap-3 px-4 py-3 rounded-lg mb-8 border"
-        style={{ background: 'var(--cc-surface)', borderColor: 'var(--cc-border)' }}
-      >
-        <Info size={16} className="mt-0.5 shrink-0" style={{ color: 'var(--cc-accent)' }} />
-        <div className="text-xs leading-relaxed" style={{ color: 'var(--cc-text-secondary)' }}>
-          When you save, the platform automatically pushes the AI config to all connected
-          FixAI and Code Parser organizations. Each service stores the config in its own database
-          and uses it for AI calls. Changes take effect immediately — no restart needed.
+      <div className="cc-card flex items-start gap-3 px-5 py-4 mb-8">
+        <Info size={18} className="mt-0.5 shrink-0" style={{ color: 'var(--cc-accent)' }} />
+        <div className="text-sm leading-relaxed" style={{ color: 'var(--cc-text-secondary)' }}>
+          Saving here pushes to all workspaces that haven’t set their own config. Use <strong>AI settings for this workspace</strong> on a workspace page for per-team keys.
         </div>
       </div>
 
-      {/* Form */}
-      <div
-        className="rounded-lg border overflow-hidden"
-        style={{ background: 'var(--cc-surface)', borderColor: 'var(--cc-border)' }}
-      >
-        {/* Provider Selection */}
+      <div className="cc-card overflow-hidden">
         <div className="p-5 border-b" style={{ borderColor: 'var(--cc-border)' }}>
-          <label className="flex items-center gap-2 text-sm font-medium mb-3" style={{ color: 'var(--cc-text)' }}>
-            <Cpu size={16} /> Provider
-          </label>
-          <div className="flex gap-3">
+          <label className="cc-label flex items-center gap-2"><Cpu size={14} /> Provider</label>
+          <div className="flex gap-3 mt-2">
             {(['bedrock', 'claude'] as const).map((p) => (
               <button
                 key={p}
                 onClick={() => setProvider(p)}
                 className="flex-1 px-4 py-3 rounded-lg text-sm font-medium cursor-pointer border transition-all"
                 style={{
-                  background: provider === p ? 'var(--cc-accent-glow)' : 'var(--cc-surface-2)',
+                  background: provider === p ? 'var(--cc-accent)' : 'var(--cc-surface-2)',
                   borderColor: provider === p ? 'var(--cc-accent)' : 'var(--cc-border)',
-                  color: provider === p ? 'var(--cc-accent)' : 'var(--cc-text-secondary)',
+                  color: provider === p ? '#fff' : 'var(--cc-text-secondary)',
                 }}
               >
                 {p === 'bedrock' ? 'AWS Bedrock Proxy' : 'Direct Claude API'}
@@ -287,19 +272,9 @@ export default function Settings() {
           </div>
         </div>
 
-        {/* Save button + status */}
-        <div className="p-5 flex items-center gap-3" style={{ background: 'var(--cc-surface-2)' }}>
-          <button
-            onClick={handleSave}
-            disabled={saving}
-            className="flex items-center gap-2 px-5 py-2.5 rounded-lg text-sm font-semibold cursor-pointer border-0 disabled:opacity-50"
-            style={{ background: 'var(--cc-accent)', color: '#fff' }}
-          >
-            {saving ? (
-              <><Loader2 size={16} className="animate-spin" /> Saving...</>
-            ) : (
-              <><Save size={16} /> Save Configuration</>
-            )}
+        <div className="p-5 flex items-center gap-3 flex-wrap" style={{ background: 'var(--cc-surface-2)' }}>
+          <button onClick={handleSave} disabled={saving} className="cc-btn-primary">
+            {saving ? <><Loader2 size={16} className="animate-spin" /> Saving…</> : <><Save size={16} /> Save</>}
           </button>
 
           {saved && (

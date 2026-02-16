@@ -21,6 +21,24 @@ async def init_db():
 
     async with engine.begin() as conn:
         await conn.run_sync(Base.metadata.create_all)
+        # Add workspace_id to ai_config if missing (one-off migration)
+        await conn.run_sync(_migrate_ai_config_workspace_id)
+
+
+def _migrate_ai_config_workspace_id(conn):
+    """Add workspace_id column to ai_config for workspace-level AI settings."""
+    from sqlalchemy import text
+    result = conn.execute(text(
+        "SELECT 1 FROM information_schema.columns "
+        "WHERE table_name = 'ai_config' AND column_name = 'workspace_id'"
+    ))
+    if result.scalar() is None:
+        conn.execute(text("ALTER TABLE ai_config ADD COLUMN workspace_id UUID REFERENCES workspaces(id) ON DELETE CASCADE"))
+        conn.execute(text("CREATE UNIQUE INDEX ai_config_workspace_id_key ON ai_config (workspace_id)"))
+        # Allow only one global (null) row
+        conn.execute(text(
+            "CREATE UNIQUE INDEX ai_config_global_key ON ai_config ((1)) WHERE workspace_id IS NULL"
+        ))
 
 
 async def get_db() -> AsyncSession:  # type: ignore[misc]

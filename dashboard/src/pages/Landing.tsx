@@ -1,241 +1,155 @@
 import { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Plus, Trash2, ArrowRight, CheckCircle2, Link2, CircleDot } from 'lucide-react';
+import { ArrowRight, Bot, Layers, Plus, Zap } from 'lucide-react';
 import { platform } from '../api/client';
-import type { WorkspaceListItem, PlatformHealth } from '../api/types';
-import { SERVICES } from '../api/types';
+import type { PlatformHealth } from '../api/types';
+import { HeroOrbit } from '../components/CodeCircleMark';
+
+/* ─── Applications (product suite) — FixAI is one of many ───────────── */
+const APPLICATIONS = [
+  {
+    id: 'fixai',
+    name: 'FixAI',
+    tagline: 'AI-powered incident debugging',
+    description: 'Chat with an AI that has context from your code, metrics, and logs. Debug production issues in one place.',
+    icon: Bot,
+    color: '#8b5cf6',
+    available: true,
+  },
+  {
+    id: 'more',
+    name: 'More coming',
+    tagline: 'Expand your toolkit',
+    description: 'CodeCircle is built to grow. New applications will plug into the same workspaces and integrations.',
+    icon: Layers,
+    color: 'var(--cc-text-muted)',
+    available: false,
+  },
+];
 
 export default function Landing() {
   const navigate = useNavigate();
-  const [workspaces, setWorkspaces] = useState<WorkspaceListItem[]>([]);
   const [health, setHealth] = useState<PlatformHealth | null>(null);
-  const [loading, setLoading] = useState(true);
-  const [showCreate, setShowCreate] = useState(false);
-  const [newName, setNewName] = useState('');
-  const [creating, setCreating] = useState(false);
 
   useEffect(() => {
-    loadData();
+    platform.health().then(setHealth).catch(() => {});
   }, []);
 
-  async function loadData() {
-    setLoading(true);
-    try {
-      const [ws, h] = await Promise.allSettled([platform.listWorkspaces(), platform.health()]);
-      if (ws.status === 'fulfilled') setWorkspaces(ws.value);
-      if (h.status === 'fulfilled') setHealth(h.value);
-    } finally {
-      setLoading(false);
-    }
-  }
-
-  async function handleCreate() {
-    if (!newName.trim()) return;
-    setCreating(true);
-    try {
-      const slug = newName.trim().toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '');
-      const ws = await platform.createWorkspace(newName.trim(), slug);
-      navigate(`/workspace/${ws.id}`);
-    } catch (e: any) {
-      alert(e.message);
-    } finally {
-      setCreating(false);
-    }
-  }
-
-  async function handleDelete(e: React.MouseEvent, id: string) {
-    e.stopPropagation();
-    if (!confirm('Delete this workspace?')) return;
-    try {
-      await platform.deleteWorkspace(id);
-      setWorkspaces((prev) => prev.filter((w) => w.id !== id));
-    } catch (e: any) {
-      alert(e.message);
-    }
-  }
-
-  function connectedCount(ws: WorkspaceListItem): number {
-    const ids = ws.service_ids;
-    return [ids.fixai_org_id, ids.metrics_org_id, ids.logs_org_id, ids.code_parser_org_id].filter(Boolean).length;
-  }
-
   return (
-    <div className="max-w-5xl mx-auto px-6 py-10">
-      {/* Hero */}
-      <div className="mb-10">
-        <div className="flex items-center gap-3 mb-3">
-          <CircleDot size={32} style={{ color: 'var(--cc-accent)' }} />
-          <h1 className="text-3xl font-bold" style={{ color: 'var(--cc-text)' }}>
-            CodeCircle
-          </h1>
+    <div className="min-h-screen cc-landing-bg relative">
+      {/* Fixed orbit: stays in place while content scrolls */}
+      <HeroOrbit />
+      <div className="relative z-10">
+      {/* ─── Hero ───────────────────────────────────────────────────── */}
+      <section className="w-full max-w-4xl mx-auto px-6 pt-8 pb-16 text-center min-h-[75vh] flex flex-col items-center justify-center">
+        <div className="w-full flex flex-col items-center">
+        <div
+          className="inline-flex items-center gap-2 px-3 py-1.5 rounded-full text-xs font-medium mb-6"
+          style={{ background: 'var(--cc-accent-soft)', color: 'var(--cc-accent)' }}
+        >
+          <Zap size={16} /> One platform · End to end Tech Stack . AI Integrated.
         </div>
-        <p className="text-base max-w-2xl" style={{ color: 'var(--cc-text-secondary)' }}>
-          Unified platform for AI-powered production debugging. Create a workspace, configure
-          each service using its native UI, then connect them together.
+        <h1
+          className="text-4xl sm:text-5xl font-bold tracking-tight mb-5"
+          style={{ color: 'var(--cc-text)', lineHeight: 1.15 }}
+        >
+          Production,
+          <br />
+          <span style={{ color: 'var(--cc-accent)' }}>simplified.</span>
+        </h1>
+        <p className="text-lg max-w-xl mx-auto mb-10" style={{ color: 'var(--cc-text-secondary)' }}>
+          CodeCircle connects your stack and your team. Start with FixAI for AI-powered debugging—add more applications as we ship.
         </p>
-      </div>
-
-      {/* Service Health Bar */}
-      {health && (
-        <div
-          className="flex items-center gap-4 px-4 py-3 rounded-lg mb-8 border"
-          style={{ background: 'var(--cc-surface)', borderColor: 'var(--cc-border)' }}
-        >
-          <span className="text-xs font-medium uppercase tracking-wider" style={{ color: 'var(--cc-text-muted)' }}>
-            Services
-          </span>
-          {health.services.map((s) => (
-            <div key={s.service} className="flex items-center gap-1.5">
-              <div
-                className="w-2 h-2 rounded-full"
-                style={{ background: s.healthy ? 'var(--cc-success)' : 'var(--cc-error)' }}
-              />
-              <span className="text-xs" style={{ color: 'var(--cc-text-secondary)' }}>
-                {s.service}
-                {s.latency_ms != null && (
-                  <span style={{ color: 'var(--cc-text-muted)' }}> {s.latency_ms}ms</span>
-                )}
-              </span>
-            </div>
-          ))}
-        </div>
-      )}
-
-      {/* Workspaces */}
-      <div className="flex items-center justify-between mb-5">
-        <h2 className="text-lg font-semibold" style={{ color: 'var(--cc-text)' }}>
-          Workspaces
-        </h2>
-        <button
-          onClick={() => setShowCreate(true)}
-          className="flex items-center gap-1.5 px-3.5 py-2 rounded-lg text-sm font-medium cursor-pointer border-0 transition-colors"
-          style={{ background: 'var(--cc-accent)', color: '#fff' }}
-        >
-          <Plus size={16} /> New Workspace
-        </button>
-      </div>
-
-      {/* Create form */}
-      {showCreate && (
-        <div
-          className="border rounded-lg p-5 mb-6"
-          style={{ background: 'var(--cc-surface)', borderColor: 'var(--cc-border)' }}
-        >
-          <label className="block text-sm font-medium mb-2" style={{ color: 'var(--cc-text-secondary)' }}>
-            Workspace Name
-          </label>
-          <div className="flex gap-3">
-            <input
-              autoFocus
-              type="text"
-              value={newName}
-              onChange={(e) => setNewName(e.target.value)}
-              placeholder="e.g. My Team Production"
-              className="flex-1 px-3 py-2 rounded-lg text-sm border outline-none"
-              style={{
-                background: 'var(--cc-surface-2)',
-                borderColor: 'var(--cc-border)',
-                color: 'var(--cc-text)',
-              }}
-              onKeyDown={(e) => e.key === 'Enter' && handleCreate()}
-            />
-            <button
-              onClick={handleCreate}
-              disabled={creating || !newName.trim()}
-              className="px-4 py-2 rounded-lg text-sm font-medium cursor-pointer border-0 disabled:opacity-50"
-              style={{ background: 'var(--cc-accent)', color: '#fff' }}
-            >
-              {creating ? 'Creating...' : 'Create'}
-            </button>
-            <button
-              onClick={() => { setShowCreate(false); setNewName(''); }}
-              className="px-3 py-2 rounded-lg text-sm cursor-pointer border"
-              style={{ background: 'transparent', borderColor: 'var(--cc-border)', color: 'var(--cc-text-secondary)' }}
-            >
-              Cancel
-            </button>
-          </div>
-        </div>
-      )}
-
-      {/* Workspace cards */}
-      {loading ? (
-        <div className="text-center py-20" style={{ color: 'var(--cc-text-muted)' }}>Loading...</div>
-      ) : workspaces.length === 0 && !showCreate ? (
-        <div
-          className="text-center py-20 rounded-lg border border-dashed"
-          style={{ borderColor: 'var(--cc-border)', color: 'var(--cc-text-muted)' }}
-        >
-          <p className="text-lg mb-2">No workspaces yet</p>
-          <p className="text-sm mb-4">Create your first workspace to get started</p>
+        <div className="flex flex-wrap items-center justify-center gap-3">
           <button
-            onClick={() => setShowCreate(true)}
-            className="px-4 py-2 rounded-lg text-sm font-medium cursor-pointer border-0"
-            style={{ background: 'var(--cc-accent)', color: '#fff' }}
+            onClick={() => navigate('/workspaces')}
+            className="cc-btn-primary"
           >
-            <Plus size={16} className="inline mr-1 -mt-0.5" /> Create Workspace
+            <Plus size={18} /> Create workspace
+          </button>
+          <button
+            onClick={() => navigate('/workspaces')}
+            className="cc-btn-secondary"
+          >
+            Open existing workspace <ArrowRight size={16} />
           </button>
         </div>
-      ) : (
-        <div className="grid gap-4">
-          {workspaces.map((ws) => {
-            const count = connectedCount(ws);
+        </div>
+      </section>
+
+      {/* ─── Applications ───────────────────────────────────────────── */}
+      <section className="max-w-4xl mx-auto px-6 pb-16 relative z-10">
+        <h2 className="cc-heading-section text-center">Applications</h2>
+        <p className="text-center text-sm mb-10 max-w-md mx-auto" style={{ color: 'var(--cc-text-muted)' }}>
+          FixAI is the first application on CodeCircle. More are on the way—all in the same workspace.
+        </p>
+        <div className="grid sm:grid-cols-2 gap-4">
+          {APPLICATIONS.map((app) => {
+            const Icon = app.icon;
             return (
               <div
-                key={ws.id}
-                onClick={() => navigate(`/workspace/${ws.id}`)}
-                className="flex items-center justify-between p-5 rounded-lg border cursor-pointer transition-all hover:scale-[1.005]"
-                style={{
-                  background: 'var(--cc-surface)',
-                  borderColor: 'var(--cc-border)',
-                }}
+                key={app.id}
+                className={`cc-card p-6 ${app.available ? 'cursor-default' : 'opacity-75'}`}
               >
-                <div className="flex-1">
-                  <div className="flex items-center gap-2.5 mb-2">
-                    <h3 className="text-base font-semibold" style={{ color: 'var(--cc-text)' }}>
-                      {ws.name}
-                    </h3>
-                  </div>
-                  <div className="flex items-center gap-3">
-                    <div className="flex items-center gap-1.5">
-                      <Link2 size={12} style={{ color: 'var(--cc-text-muted)' }} />
-                      <span className="text-xs" style={{ color: 'var(--cc-text-secondary)' }}>
-                        {count}/4 services connected
-                      </span>
-                    </div>
-                    {/* service dots */}
-                    <div className="flex items-center gap-1">
-                      {SERVICES.map((svc) => (
-                        <div
-                          key={svc.key}
-                          className="w-2 h-2 rounded-full"
-                          title={`${svc.name}: ${ws.service_ids[svc.serviceIdField] ? 'Connected' : 'Not connected'}`}
-                          style={{
-                            background: ws.service_ids[svc.serviceIdField] ? svc.color : 'var(--cc-surface-3)',
-                          }}
-                        />
-                      ))}
-                    </div>
-                  </div>
-                </div>
-                <div className="flex items-center gap-2 ml-4">
-                  {count === 4 && (
-                    <CheckCircle2 size={16} style={{ color: 'var(--cc-success)' }} />
-                  )}
-                  <button
-                    onClick={(e) => handleDelete(e, ws.id)}
-                    className="p-2 rounded-md cursor-pointer border-0 transition-colors"
-                    style={{ background: 'transparent', color: 'var(--cc-text-muted)' }}
-                    title="Delete workspace"
+                <div className="flex items-start gap-4">
+                  <div
+                    className="w-12 h-12 rounded-xl flex items-center justify-center shrink-0"
+                    style={{ background: app.available ? `${app.color}20` : 'var(--cc-surface-3)', color: app.color }}
                   >
-                    <Trash2 size={16} />
-                  </button>
-                  <ArrowRight size={18} style={{ color: 'var(--cc-text-muted)' }} />
+                    <Icon size={24} />
+                  </div>
+                  <div className="min-w-0">
+                    <div className="flex items-center gap-2 mb-1">
+                      <h3 className="font-semibold text-base" style={{ color: 'var(--cc-text)' }}>
+                        {app.name}
+                      </h3>
+                      {app.available && (
+                        <span className="cc-badge cc-badge-success">Available</span>
+                      )}
+                    </div>
+                    <p className="text-sm font-medium mb-1" style={{ color: 'var(--cc-text-secondary)' }}>
+                      {app.tagline}
+                    </p>
+                    <p className="text-sm" style={{ color: 'var(--cc-text-muted)' }}>
+                      {app.description}
+                    </p>
+                  </div>
                 </div>
               </div>
             );
           })}
         </div>
+      </section>
+
+      <p className="text-center pb-32 relative z-10">
+        <button
+          onClick={() => navigate('/workspaces')}
+          className="text-sm font-medium cursor-pointer border-0 bg-transparent"
+          style={{ color: 'var(--cc-accent)' }}
+        >
+          View all workspaces →
+        </button>
+      </p>
+
+      </div>
+
+      {/* ─── Status bar (minimal) ────────────────────────────────────── */}
+      {health && (
+        <footer
+          className="fixed bottom-0 left-0 right-0 py-2 px-4 border-t flex items-center justify-center gap-6 text-xs z-20"
+          style={{ background: 'var(--cc-bg-elevated)', borderColor: 'var(--cc-border)', color: 'var(--cc-text-muted)' }}
+        >
+          {health.services.map((s) => (
+            <span key={s.service} className="flex items-center gap-1.5">
+              <span
+                className="w-1.5 h-1.5 rounded-full"
+                style={{ background: s.healthy ? 'var(--cc-success)' : 'var(--cc-error)' }}
+              />
+              {s.service}
+              {s.latency_ms != null && <span>· {s.latency_ms}ms</span>}
+            </span>
+          ))}
+        </footer>
       )}
     </div>
   );

@@ -1,6 +1,7 @@
 import { BrowserRouter, Routes, Route } from 'react-router-dom';
 import Layout from './components/Layout';
 import Landing from './pages/Landing';
+import WorkspaceList from './pages/WorkspaceList';
 import Settings from './pages/Settings';
 import WorkspaceDashboard from './pages/WorkspaceDashboard';
 import ServiceEmbed from './pages/ServiceEmbed';
@@ -12,6 +13,7 @@ export default function App() {
       <Routes>
         <Route element={<Layout />}>
           <Route path="/" element={<Landing />} />
+          <Route path="/workspaces" element={<WorkspaceList />} />
           <Route path="/settings" element={<Settings />} />
           <Route path="/workspace/:workspaceId" element={<WorkspaceDashboard />} />
           <Route path="/workspace/:workspaceId/service/:serviceKey" element={<ServiceEmbed />} />

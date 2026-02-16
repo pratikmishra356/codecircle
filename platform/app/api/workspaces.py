@@ -22,6 +22,7 @@ from app.schemas.workspace import (
     WorkspaceListItem,
     WorkspaceResponse,
 )
+from app.schemas.ai_config import AIConfigResponse, AIConfigUpdate
 
 logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/api/platform", tags=["workspaces"])
@@ -153,6 +154,46 @@ async def get_workspace(workspace_id: uuid.UUID, db: AsyncSession = Depends(get_
     if not ws:
         raise HTTPException(status_code=404, detail="Workspace not found")
     return _to_response(ws)
+
+
+# ── Workspace-scoped AI config ───────────────────────────────────────
+
+
+@router.get("/workspaces/{workspace_id}/ai-config", response_model=AIConfigResponse)
+async def get_workspace_ai_config(workspace_id: uuid.UUID, db: AsyncSession = Depends(get_db)):
+    """Get AI config for this workspace (creates from global default if missing)."""
+    ws = await db.get(Workspace, workspace_id)
+    if not ws:
+        raise HTTPException(status_code=404, detail="Workspace not found")
+    from app.api.ai_settings import get_or_create_ai_config, _to_response
+    cfg = await get_or_create_ai_config(db, workspace_id=workspace_id)
+    return _to_response(cfg)
+
+
+@router.put("/workspaces/{workspace_id}/ai-config", response_model=AIConfigResponse)
+async def save_workspace_ai_config(
+    workspace_id: uuid.UUID,
+    body: AIConfigUpdate,
+    background_tasks: BackgroundTasks,
+    db: AsyncSession = Depends(get_db),
+):
+    """Save AI config for this workspace and push only to this workspace's connected orgs."""
+    ws = await db.get(Workspace, workspace_id)
+    if not ws:
+        raise HTTPException(status_code=404, detail="Workspace not found")
+    from app.api.ai_settings import get_or_create_ai_config, _to_response, _push_to_services
+    cfg = await get_or_create_ai_config(db, workspace_id=workspace_id)
+    cfg.provider = body.provider
+    if body.api_key is not None:
+        cfg.api_key = body.api_key
+    cfg.base_url = body.base_url
+    cfg.model_id = body.model_id
+    cfg.max_tokens = body.max_tokens
+    await db.commit()
+    await db.refresh(cfg)
+    logger.info("AI config (workspace %s) updated", workspace_id)
+    background_tasks.add_task(_push_to_services, cfg)
+    return _to_response(cfg)
 
 
 @router.delete("/workspaces/{workspace_id}", status_code=204)

@@ -1,13 +1,14 @@
-"""AI / LLM configuration endpoints — single global config.
+"""AI / LLM configuration — global default or per-workspace.
 
-On save, pushes the config to all connected FixAI and Code Parser orgs
-via their PUT /organizations/{org_id}/ai-config endpoints.
+Global: GET/PUT /api/platform/ai-config (used as fallback when workspace has no config).
+Workspace: GET/PUT /api/platform/workspaces/{id}/ai-config (pushes only to that workspace's orgs).
 """
 
 from __future__ import annotations
 
 import logging
 import os
+import uuid
 
 import httpx
 from fastapi import APIRouter, BackgroundTasks, Depends
@@ -39,35 +40,57 @@ def _to_response(cfg: AIConfig) -> AIConfigResponse:
     )
 
 
-async def _get_or_create(db: AsyncSession) -> AIConfig:
-    """Return the singleton AI config row, creating it if absent."""
-    result = await db.execute(select(AIConfig).limit(1))
+async def get_or_create_ai_config(db: AsyncSession, workspace_id: uuid.UUID | None = None) -> AIConfig:
+    """Get or create AI config for global (workspace_id=None) or a specific workspace."""
+    if workspace_id is None:
+        result = await db.execute(select(AIConfig).where(AIConfig.workspace_id.is_(None)).limit(1))
+        cfg = result.scalar_one_or_none()
+        if cfg is None:
+            cfg = AIConfig(
+                workspace_id=None,
+                provider="bedrock" if os.getenv("CLAUDE_BEDROCK_URL") else "claude",
+                api_key=os.getenv("CLAUDE_API_KEY", ""),
+                base_url=os.getenv("CLAUDE_BEDROCK_URL", ""),
+                model_id=os.getenv("CLAUDE_MODEL_ID", ""),
+                max_tokens=4096,
+            )
+            db.add(cfg)
+            await db.commit()
+            await db.refresh(cfg)
+            logger.info("AI config (global) seeded from environment variables")
+        return cfg
+
+    result = await db.execute(select(AIConfig).where(AIConfig.workspace_id == workspace_id).limit(1))
     cfg = result.scalar_one_or_none()
     if cfg is None:
-        # Seed from environment variables on first access
+        # New workspace config: copy provider/URL/model from global for form defaults,
+        # but leave api_key empty so "Configure AI settings" is not done until the user saves.
+        global_result = await db.execute(select(AIConfig).where(AIConfig.workspace_id.is_(None)).limit(1))
+        global_cfg = global_result.scalar_one_or_none()
         cfg = AIConfig(
-            provider="bedrock" if os.getenv("CLAUDE_BEDROCK_URL") else "claude",
-            api_key=os.getenv("CLAUDE_API_KEY", ""),
-            base_url=os.getenv("CLAUDE_BEDROCK_URL", ""),
-            model_id=os.getenv("CLAUDE_MODEL_ID", ""),
-            max_tokens=4096,
+            workspace_id=workspace_id,
+            provider=global_cfg.provider if global_cfg else "bedrock",
+            api_key=None,  # Empty until user configures; do not copy from global
+            base_url=global_cfg.base_url if global_cfg else os.getenv("CLAUDE_BEDROCK_URL", ""),
+            model_id=global_cfg.model_id if global_cfg else os.getenv("CLAUDE_MODEL_ID", ""),
+            max_tokens=global_cfg.max_tokens if global_cfg else 4096,
         )
         db.add(cfg)
         await db.commit()
         await db.refresh(cfg)
-        logger.info("AI config seeded from environment variables")
+        logger.info("AI config created for workspace %s (api_key left empty)", workspace_id)
     return cfg
 
 
 @router.get("", response_model=AIConfigResponse)
 async def get_ai_config(db: AsyncSession = Depends(get_db)):
-    """Get the current AI / LLM configuration."""
-    cfg = await _get_or_create(db)
+    """Get global AI / LLM configuration (default for all workspaces)."""
+    cfg = await get_or_create_ai_config(db, workspace_id=None)
     return _to_response(cfg)
 
 
 async def _push_to_services(cfg: AIConfig):
-    """Push AI config to all connected FixAI and Code Parser orgs across all workspaces."""
+    """Push AI config to one workspace's orgs, or all workspaces if cfg is global."""
     from app.database import async_session
 
     payload = {
@@ -78,12 +101,18 @@ async def _push_to_services(cfg: AIConfig):
     }
 
     async with async_session() as db:
-        result = await db.execute(select(Workspace))
-        workspaces = result.scalars().all()
+        if cfg.workspace_id is not None:
+            result = await db.execute(select(Workspace).where(Workspace.id == cfg.workspace_id))
+            ws = result.scalar_one_or_none()
+            workspaces = [ws] if ws else []
+        else:
+            result = await db.execute(select(Workspace))
+            workspaces = result.scalars().all()
 
     async with httpx.AsyncClient(timeout=_TIMEOUT) as client:
         for ws in workspaces:
-            # Push to FixAI org
+            if not ws:
+                continue
             if ws.fixai_org_id:
                 url = f"{platform_settings.fixai_url}/api/v1/organizations/{ws.fixai_org_id}/ai-config"
                 try:
@@ -92,8 +121,6 @@ async def _push_to_services(cfg: AIConfig):
                     logger.info("Pushed AI config to FixAI org %s", ws.fixai_org_id)
                 except Exception as e:
                     logger.warning("Failed to push AI config to FixAI org %s: %s", ws.fixai_org_id, e)
-
-            # Push to Code Parser org
             if ws.code_parser_org_id:
                 url = f"{platform_settings.code_parser_url}/api/v1/orgs/{ws.code_parser_org_id}/ai-config"
                 try:
@@ -110,8 +137,8 @@ async def save_ai_config(
     background_tasks: BackgroundTasks,
     db: AsyncSession = Depends(get_db),
 ):
-    """Save AI / LLM configuration and push to connected service orgs."""
-    cfg = await _get_or_create(db)
+    """Save global AI / LLM configuration and push to all connected service orgs."""
+    cfg = await get_or_create_ai_config(db, workspace_id=None)
     cfg.provider = body.provider
     if body.api_key is not None:
         cfg.api_key = body.api_key
@@ -120,23 +147,15 @@ async def save_ai_config(
     cfg.max_tokens = body.max_tokens
     await db.commit()
     await db.refresh(cfg)
-    logger.info("AI config updated (provider=%s, model=%s)", cfg.provider, cfg.model_id)
-
-    # Push to connected services in background
+    logger.info("AI config (global) updated (provider=%s, model=%s)", cfg.provider, cfg.model_id)
     background_tasks.add_task(_push_to_services, cfg)
-
     return _to_response(cfg)
 
 
 @router.get("/raw")
 async def get_ai_config_raw(db: AsyncSession = Depends(get_db)):
-    """Return raw AI config for internal service consumption.
-
-    Services like FixAI and Code Parser can call this endpoint on
-    startup to get the centrally managed AI configuration.
-    Endpoint: GET http://platform:8200/api/platform/ai-config/raw
-    """
-    cfg = await _get_or_create(db)
+    """Return raw global AI config for internal service consumption."""
+    cfg = await get_or_create_ai_config(db, workspace_id=None)
     return {
         "provider": cfg.provider,
         "claude_api_key": cfg.api_key or "",

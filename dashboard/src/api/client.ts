@@ -60,12 +60,20 @@ export const platform = {
       body: JSON.stringify({ name, slug }),
     }),
 
-  // AI Configuration
-  getAIConfig: () => request<AIConfig>(`${PLATFORM}/ai-config`),
+  // AI Configuration (global default)
+  getAIConfig: (workspaceId?: string) =>
+    workspaceId
+      ? request<AIConfig>(`${PLATFORM}/workspaces/${workspaceId}/ai-config`)
+      : request<AIConfig>(`${PLATFORM}/ai-config`),
 
-  saveAIConfig: (config: AIConfigUpdate) =>
-    request<AIConfig>(`${PLATFORM}/ai-config`, {
-      method: 'PUT',
-      body: JSON.stringify(config),
-    }),
+  saveAIConfig: (config: AIConfigUpdate, workspaceId?: string) =>
+    workspaceId
+      ? request<AIConfig>(`${PLATFORM}/workspaces/${workspaceId}/ai-config`, {
+          method: 'PUT',
+          body: JSON.stringify(config),
+        })
+      : request<AIConfig>(`${PLATFORM}/ai-config`, {
+          method: 'PUT',
+          body: JSON.stringify(config),
+        }),
 };

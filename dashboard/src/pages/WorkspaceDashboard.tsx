@@ -15,9 +15,13 @@ import {
   MessageSquare,
   Loader2,
   Plus,
+  Key,
+  ChevronRight,
+  Sparkles,
+  ListOrdered,
 } from 'lucide-react';
 import { platform } from '../api/client';
-import type { Workspace, PlatformHealth, ServiceOrg, ServiceInfo } from '../api/types';
+import type { Workspace, PlatformHealth, ServiceOrg, ServiceInfo, AIConfig, AIConfigUpdate } from '../api/types';
 import { SERVICES } from '../api/types';
 
 const ICON_MAP: Record<string, React.ReactNode> = {
@@ -27,6 +31,245 @@ const ICON_MAP: Record<string, React.ReactNode> = {
   Code2: <Code2 size={20} />,
 };
 
+/* ── Workspace-scoped AI settings card ─────────────────────────────── */
+function WorkspaceAICard({ workspaceId, className = '', onSaved }: { workspaceId: string; className?: string; onSaved?: () => void }) {
+  const [config, setConfig] = useState<AIConfig | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [expanded, setExpanded] = useState(false);
+  const [saving, setSaving] = useState(false);
+  const [saved, setSaved] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [provider, setProvider] = useState<'claude' | 'bedrock'>('bedrock');
+  const [apiKey, setApiKey] = useState('');
+  const [baseUrl, setBaseUrl] = useState('');
+  const [modelId, setModelId] = useState('');
+  const [maxTokens, setMaxTokens] = useState(4096);
+
+  useEffect(() => {
+    if (!workspaceId) return;
+    (async () => {
+      setLoading(true);
+      try {
+        const cfg = await platform.getAIConfig(workspaceId);
+        setConfig(cfg);
+        setProvider(cfg.provider as 'claude' | 'bedrock');
+        setBaseUrl(cfg.base_url || '');
+        setModelId(cfg.model_id || '');
+        setMaxTokens(cfg.max_tokens);
+      } catch {
+        setConfig(null);
+      } finally {
+        setLoading(false);
+      }
+    })();
+  }, [workspaceId]);
+
+  async function handleSave() {
+    setSaving(true);
+    setError(null);
+    setSaved(false);
+    try {
+      const update: AIConfigUpdate = {
+        provider,
+        base_url: baseUrl || null,
+        model_id: modelId || null,
+        max_tokens: maxTokens,
+      };
+      if (apiKey.trim()) update.api_key = apiKey.trim();
+      const cfg = await platform.saveAIConfig(update, workspaceId);
+      setConfig(cfg);
+      setApiKey('');
+      setSaved(true);
+      setTimeout(() => setSaved(false), 3000);
+      onSaved?.();
+    } catch (e: unknown) {
+      setError(e instanceof Error ? e.message : 'Failed to save');
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  return (
+    <div className={`cc-card overflow-hidden ${className}`}>
+      <button
+        onClick={() => setExpanded(!expanded)}
+        className="w-full flex items-center justify-between p-5 cursor-pointer border-0 text-left hover:opacity-90 transition-opacity"
+        style={{ background: 'transparent', color: 'var(--cc-text)' }}
+      >
+        <div className="flex items-center gap-3">
+          <div className="w-10 h-10 rounded-xl flex items-center justify-center" style={{ background: 'var(--cc-accent-soft)' }}>
+            <Key size={20} style={{ color: 'var(--cc-accent)' }} />
+          </div>
+          <div>
+            <div className="font-semibold text-sm">AI settings for this workspace</div>
+            <div className="text-xs mt-0.5" style={{ color: 'var(--cc-text-muted)' }}>
+              {loading ? 'Loading...' : config?.api_key_set ? `Key set · ${config.model_id || 'Default model'}` : 'Configure API key, model, and Bedrock URL'}
+            </div>
+          </div>
+        </div>
+        <ChevronDown size={18} style={{ color: 'var(--cc-text-muted)', transform: expanded ? 'rotate(180deg)' : 'none', transition: 'transform 0.2s' }} />
+      </button>
+      {expanded && (
+        <div className="px-5 pb-5 pt-0 border-t" style={{ borderColor: 'var(--cc-border)' }}>
+          <div className="grid gap-4 pt-4">
+            <div className="flex gap-3">
+              {(['bedrock', 'claude'] as const).map((p) => (
+                <button key={p} onClick={() => setProvider(p)} className="flex-1 px-3 py-2 rounded-lg text-xs font-medium cursor-pointer border" style={{ background: provider === p ? 'var(--cc-accent-glow)' : 'var(--cc-surface-2)', borderColor: provider === p ? 'var(--cc-accent)' : 'var(--cc-border)', color: provider === p ? 'var(--cc-accent)' : 'var(--cc-text-secondary)' }}>
+                  {p === 'bedrock' ? 'Bedrock Proxy' : 'Claude API'}
+                </button>
+              ))}
+            </div>
+            <div>
+              <label className="text-xs font-medium block mb-1" style={{ color: 'var(--cc-text-secondary)' }}>API Key</label>
+              <input type="password" value={apiKey} onChange={(e) => setApiKey(e.target.value)} placeholder={config?.api_key_set ? 'New key (leave blank to keep)' : 'API key or token'} className="w-full px-3 py-2 rounded-lg text-sm border font-mono outline-none" style={{ background: 'var(--cc-surface-2)', borderColor: 'var(--cc-border)', color: 'var(--cc-text)' }} />
+            </div>
+            <div>
+              <label className="text-xs font-medium block mb-1" style={{ color: 'var(--cc-text-secondary)' }}>Base URL</label>
+              <input type="text" value={baseUrl} onChange={(e) => setBaseUrl(e.target.value)} placeholder="https://llm-proxy.example.com" className="w-full px-3 py-2 rounded-lg text-sm border font-mono outline-none" style={{ background: 'var(--cc-surface-2)', borderColor: 'var(--cc-border)', color: 'var(--cc-text)' }} />
+            </div>
+            <div>
+              <label className="text-xs font-medium block mb-1" style={{ color: 'var(--cc-text-secondary)' }}>Model ID</label>
+              <input type="text" value={modelId} onChange={(e) => setModelId(e.target.value)} placeholder="us.anthropic.claude-sonnet-4-20250514-v1:0" className="w-full px-3 py-2 rounded-lg text-sm border font-mono outline-none" style={{ background: 'var(--cc-surface-2)', borderColor: 'var(--cc-border)', color: 'var(--cc-text)' }} />
+            </div>
+            <div className="flex items-center gap-3 flex-wrap">
+              <button onClick={handleSave} disabled={saving} className="cc-action flex items-center gap-2 px-4 py-2 rounded-lg text-sm cursor-pointer border-0 disabled:opacity-50">
+                {saving ? <Loader2 size={14} className="animate-spin" /> : null} {saving ? 'Saving...' : 'Save'}
+              </button>
+              {saved && <span className="text-xs flex items-center gap-1" style={{ color: 'var(--cc-success)' }}><CheckCircle2 size={14} /> Saved</span>}
+              {error && <span className="text-xs" style={{ color: 'var(--cc-error)' }}>{error}</span>}
+            </div>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+/* ─── Setup instructions (step-by-step) ────────────────────────────── */
+const SETUP_STEPS = [
+  {
+    id: 'workspace',
+    title: 'Create workspace',
+    description: 'You’re here—this workspace is ready.',
+    done: true,
+  },
+  {
+    id: 'connect',
+    title: 'Connect organizations',
+    description: 'In each service below: open its UI, create an org (or use an existing one), then connect it to this workspace. Do this for Code Parser, Metrics Explorer, Logs Explorer, and FixAI.',
+    getDone: (ws: Workspace) =>
+      [ws.service_ids.code_parser_org_id, ws.service_ids.metrics_org_id, ws.service_ids.logs_org_id, ws.service_ids.fixai_org_id].filter(Boolean).length === 4,
+    getLabel: (ws: Workspace) => {
+      const n = [ws.service_ids.code_parser_org_id, ws.service_ids.metrics_org_id, ws.service_ids.logs_org_id, ws.service_ids.fixai_org_id].filter(Boolean).length;
+      return `${n}/4 services connected`;
+    },
+  },
+  {
+    id: 'ai',
+    title: 'Configure AI settings',
+    description: 'Set your API key, Bedrock URL, and model in “AI settings for this workspace” below. Saving here pushes the config to all connected orgs (FixAI and Code Parser).',
+    getDone: (_: Workspace, aiKeySet?: boolean) => aiKeySet === true,
+  },
+  {
+    id: 'service-setup',
+    title: 'Complete org setup in each service',
+    description: 'Open each service’s UI and finish any org-specific setup: e.g. add repos in Code Parser, configure data sources in Metrics/Logs, and ensure FixAI has the context it needs.',
+    getDone: () => false,
+  },
+];
+
+function SetupSteps({
+  workspace,
+  aiConfigLoaded,
+  aiKeySet,
+  onRefresh,
+}: {
+  workspace: Workspace;
+  aiConfigLoaded: boolean;
+  aiKeySet: boolean;
+  onRefresh: () => void;
+}) {
+  const [expanded, setExpanded] = useState(false);
+  const step2Done = SETUP_STEPS[1].getDone!(workspace);
+  const step2Label = SETUP_STEPS[1].getLabel!(workspace);
+  const step3Done = aiConfigLoaded && (SETUP_STEPS[2].getDone!(workspace, aiKeySet) ?? false);
+
+  return (
+    <div className="cc-card overflow-hidden mb-8">
+      <button
+        onClick={() => setExpanded(!expanded)}
+        className="w-full flex items-center justify-between p-5 cursor-pointer border-0 text-left hover:opacity-90 transition-opacity"
+        style={{ background: 'transparent', color: 'var(--cc-text)' }}
+      >
+        <div className="flex items-center gap-3">
+          <div className="w-10 h-10 rounded-xl flex items-center justify-center" style={{ background: 'var(--cc-accent-soft)' }}>
+            <ListOrdered size={20} style={{ color: 'var(--cc-accent)' }} />
+          </div>
+          <div>
+            <div className="font-semibold text-sm">Setup instructions</div>
+            <div className="text-xs mt-0.5" style={{ color: 'var(--cc-text-muted)' }}>
+              Follow these steps to get this workspace ready for debugging
+            </div>
+          </div>
+        </div>
+        <ChevronDown size={18} style={{ color: 'var(--cc-text-muted)', transform: expanded ? 'rotate(180deg)' : 'none', transition: 'transform 0.2s' }} />
+      </button>
+      {expanded && (
+        <div className="px-5 pb-5 pt-0 border-t" style={{ borderColor: 'var(--cc-border)' }}>
+          <ol className="space-y-5 pt-5">
+            {SETUP_STEPS.map((step, index) => {
+              const done = step.id === 'workspace' ? true : step.id === 'connect' ? step2Done : step.id === 'ai' ? step3Done : (step.getDone?.(workspace, aiKeySet) ?? false);
+              const label = step.id === 'connect' ? step2Label : null;
+              return (
+                <li key={step.id} className="flex gap-4">
+                  <div className="shrink-0 flex flex-col items-center">
+                    <div
+                      className="w-8 h-8 rounded-full flex items-center justify-center text-sm font-semibold"
+                      style={{
+                        background: done ? 'var(--cc-success-soft)' : 'var(--cc-surface-2)',
+                        color: done ? 'var(--cc-success)' : 'var(--cc-text-muted)',
+                        border: '2px solid ' + (done ? 'var(--cc-success)' : 'var(--cc-border)'),
+                      }}
+                    >
+                      {done ? <CheckCircle2 size={16} /> : index + 1}
+                    </div>
+                  </div>
+                  <div className="pb-2 min-w-0">
+                    <div className="flex items-center gap-2 flex-wrap">
+                      <span className="font-semibold text-sm" style={{ color: 'var(--cc-text)' }}>
+                        {step.title}
+                      </span>
+                      {label && (
+                        <span className="cc-badge cc-badge-success text-xs">{label}</span>
+                      )}
+                      {done && step.id !== 'workspace' && (
+                        <span className="cc-badge cc-badge-success">Done</span>
+                      )}
+                    </div>
+                    <p className="text-sm mt-1" style={{ color: 'var(--cc-text-secondary)' }}>
+                      {step.description}
+                    </p>
+                    {step.id === 'connect' && !step2Done && (
+                      <button
+                        type="button"
+                        onClick={onRefresh}
+                        className="mt-2 text-xs font-medium cursor-pointer border-0 bg-transparent"
+                        style={{ color: 'var(--cc-accent)' }}
+                      >
+                        Refresh status
+                      </button>
+                    )}
+                  </div>
+                </li>
+              );
+            })}
+          </ol>
+        </div>
+      )}
+    </div>
+  );
+}
+
 export default function WorkspaceDashboard() {
   const { workspaceId } = useParams<{ workspaceId: string }>();
   const navigate = useNavigate();
@@ -34,6 +277,8 @@ export default function WorkspaceDashboard() {
   const [workspace, setWorkspace] = useState<Workspace | null>(null);
   const [health, setHealth] = useState<PlatformHealth | null>(null);
   const [loading, setLoading] = useState(true);
+  const [aiConfig, setAiConfig] = useState<AIConfig | null>(null);
+  const [aiConfigFetched, setAiConfigFetched] = useState(false);
 
   useEffect(() => {
     if (!workspaceId) return;
@@ -41,6 +286,11 @@ export default function WorkspaceDashboard() {
       platform.getWorkspace(workspaceId).then(setWorkspace),
       platform.health().then(setHealth),
     ]).finally(() => setLoading(false));
+  }, [workspaceId]);
+
+  useEffect(() => {
+    if (!workspaceId) return;
+    platform.getAIConfig(workspaceId).then((c) => { setAiConfig(c); setAiConfigFetched(true); }).catch(() => { setAiConfig(null); setAiConfigFetched(true); });
   }, [workspaceId]);
 
   const refreshWorkspace = useCallback(async () => {
@@ -66,37 +316,95 @@ export default function WorkspaceDashboard() {
     workspace.service_ids.logs_org_id,
     workspace.service_ids.code_parser_org_id,
   ].filter(Boolean).length;
+  const allConnected = connectedCount === 4;
+  const canDebug = Boolean(workspace.service_ids.fixai_org_id);
 
   return (
-    <div className="max-w-5xl mx-auto px-6 py-10">
-      {/* Header */}
+    <div className="max-w-4xl mx-auto px-6 py-10 pb-20">
       <button
         onClick={() => navigate('/')}
-        className="flex items-center gap-1 text-sm mb-4 cursor-pointer border-0 bg-transparent"
+        className="flex items-center gap-1.5 text-sm mb-6 cursor-pointer border-0 bg-transparent font-medium hover:opacity-80 transition-opacity"
         style={{ color: 'var(--cc-text-muted)' }}
       >
-        <ArrowLeft size={14} /> All Workspaces
+        <ArrowLeft size={14} /> Workspaces
       </button>
 
-      <div className="flex items-center justify-between mb-2">
-        <h1 className="text-2xl font-bold" style={{ color: 'var(--cc-text)' }}>
-          {workspace.name}
-        </h1>
-        {workspace.service_ids.fixai_org_id && (
+      <div className="flex items-center justify-between mb-6">
+        <div>
+          <h1 className="text-2xl font-bold tracking-tight" style={{ color: 'var(--cc-text)' }}>
+            {workspace.name}
+          </h1>
+          <p className="text-sm mt-1" style={{ color: 'var(--cc-text-muted)' }}>
+            {connectedCount}/4 services connected
+          </p>
+        </div>
+        {canDebug && (
           <button
             onClick={() => navigate(`/workspace/${workspaceId}/debug`)}
-            className="flex items-center gap-2 px-5 py-2.5 rounded-lg text-sm font-semibold cursor-pointer border-0"
-            style={{ background: 'var(--cc-accent)', color: '#fff' }}
+            className="cc-btn-primary"
           >
-            <MessageSquare size={16} /> Start Debugging
+            <MessageSquare size={18} /> Start Debugging <ChevronRight size={16} />
           </button>
         )}
       </div>
 
-      <p className="text-sm mb-8" style={{ color: 'var(--cc-text-muted)' }}>
-        {connectedCount}/4 services connected. Open each service below to create organizations,
-        then connect them to this workspace.
-      </p>
+      {/* Setup instructions */}
+      {workspaceId && (
+        <SetupSteps
+          workspace={workspace}
+          aiConfigLoaded={aiConfigFetched}
+          aiKeySet={aiConfig?.api_key_set ?? false}
+          onRefresh={refreshWorkspace}
+        />
+      )}
+
+      {/* Workspace AI settings card */}
+      {workspaceId && (
+        <WorkspaceAICard
+          workspaceId={workspaceId}
+          className="mb-8"
+          onSaved={() => platform.getAIConfig(workspaceId).then((c) => { setAiConfig(c); setAiConfigFetched(true); }).catch(() => setAiConfig(null))}
+        />
+      )}
+
+      {!allConnected && (
+        <div
+          className="cc-card rounded-xl p-5 mb-8 flex items-center gap-4 flex-wrap"
+          style={{ borderColor: 'var(--cc-accent-muted)', background: 'var(--cc-accent-soft)' }}
+        >
+          <div className="flex items-center gap-3">
+            <div className="w-10 h-10 rounded-xl flex items-center justify-center" style={{ background: 'var(--cc-accent-muted)' }}>
+              <Sparkles size={20} style={{ color: 'var(--cc-accent)' }} />
+            </div>
+            <div>
+              <div className="font-semibold text-sm" style={{ color: 'var(--cc-text)' }}>
+                Complete setup to unlock debugging
+              </div>
+              <div className="text-xs mt-0.5" style={{ color: 'var(--cc-text-secondary)' }}>
+                Connect all 4 services below: open each UI, create an org, then link it here.
+              </div>
+            </div>
+          </div>
+          <div className="flex items-center gap-2 ml-auto">
+            {SERVICES.map((s) => {
+              const connected = Boolean(workspace.service_ids[s.serviceIdField]);
+              return (
+                <div
+                  key={s.key}
+                  className="w-8 h-8 rounded-lg flex items-center justify-center"
+                  style={{
+                    background: connected ? 'var(--cc-success-soft)' : 'var(--cc-surface-2)',
+                    color: connected ? 'var(--cc-success)' : 'var(--cc-text-muted)',
+                  }}
+                  title={`${s.name}: ${connected ? 'Connected' : 'Not connected'}`}
+                >
+                  {connected ? <CheckCircle2 size={14} /> : <span className="text-xs">—</span>}
+                </div>
+              );
+            })}
+          </div>
+        </div>
+      )}
 
       {/* Service Cards */}
       <div className="space-y-4 mb-10">
@@ -225,10 +533,7 @@ function ServiceSection({
   }
 
   return (
-    <div
-      className="rounded-lg border overflow-hidden"
-      style={{ background: 'var(--cc-surface)', borderColor: 'var(--cc-border)' }}
-    >
+    <div className="cc-card overflow-hidden">
       {/* Card header */}
       <div className="flex items-center justify-between p-5">
         <div className="flex items-center gap-3">
@@ -264,19 +569,9 @@ function ServiceSection({
 
         <div className="flex items-center gap-2">
           {linkedOrgId ? (
-            <span
-              className="text-xs px-2.5 py-1 rounded-full"
-              style={{ background: 'rgba(34,197,94,0.1)', color: 'var(--cc-success)' }}
-            >
-              Connected
-            </span>
+            <span className="cc-badge cc-badge-success">Connected</span>
           ) : (
-            <span
-              className="text-xs px-2.5 py-1 rounded-full"
-              style={{ background: 'var(--cc-surface-3)', color: 'var(--cc-text-muted)' }}
-            >
-              Not connected
-            </span>
+            <span className="cc-badge cc-badge-muted">Not connected</span>
           )}
         </div>
       </div>
@@ -286,13 +581,8 @@ function ServiceSection({
         className="flex items-center gap-2 px-5 py-3 border-t"
         style={{ borderColor: 'var(--cc-border)', background: 'var(--cc-surface-2)' }}
       >
-        {/* Open UI button */}
-        <button
-          onClick={onOpenUI}
-          className="flex items-center gap-1.5 px-3 py-1.5 rounded-md text-xs font-medium cursor-pointer border"
-          style={{ background: 'transparent', borderColor: 'var(--cc-border)', color: 'var(--cc-text-secondary)' }}
-        >
-          <ExternalLink size={12} /> Open {svc.name} UI
+        <button onClick={onOpenUI} className="cc-btn-primary text-xs py-2 px-3">
+          <ExternalLink size={12} /> Open {svc.name}
         </button>
 
         {/* Connect / Disconnect */}
@@ -301,47 +591,24 @@ function ServiceSection({
             <span className="text-xs font-mono px-2 truncate max-w-[200px]" style={{ color: 'var(--cc-text-muted)' }}>
               Org: {linkedOrgId.slice(0, 8)}...
             </span>
-            <button
-              onClick={handleDisconnect}
-              className="flex items-center gap-1 px-2 py-1.5 rounded-md text-xs cursor-pointer border-0"
-              style={{ background: 'transparent', color: 'var(--cc-error)' }}
-              title="Disconnect this organization"
-            >
+            <button onClick={handleDisconnect} className="flex items-center gap-1 px-2 py-1.5 rounded-lg text-xs cursor-pointer border-0" style={{ background: 'transparent', color: 'var(--cc-error)' }} title="Disconnect">
               <Unlink size={12} /> Disconnect
             </button>
           </>
         ) : (
           <>
-            {/* For FixAI: show Create button (primary action) */}
             {isFixAI && (
               <button
                 onClick={() => { setShowCreateForm(!showCreateForm); setShowPicker(false); }}
                 disabled={otherServicesConnected === 0}
-                className="flex items-center gap-1.5 px-3 py-1.5 rounded-md text-xs font-medium cursor-pointer border"
-                style={{
-                  background: showCreateForm ? 'var(--cc-accent)' : 'transparent',
-                  borderColor: showCreateForm ? 'var(--cc-accent)' : svc.color,
-                  color: showCreateForm ? '#fff' : svc.color,
-                  opacity: otherServicesConnected === 0 ? 0.5 : 1,
-                  cursor: otherServicesConnected === 0 ? 'not-allowed' : 'pointer',
-                }}
-                title={otherServicesConnected === 0 ? 'Connect at least one other service first' : 'Create a new FixAI org with service details pre-filled'}
+                className={showCreateForm ? 'cc-btn-primary text-xs py-2 px-3' : 'cc-btn-secondary text-xs py-2 px-3'}
+                title={otherServicesConnected === 0 ? 'Connect at least one other service first' : 'Create FixAI org'}
               >
                 <Plus size={12} /> Create FixAI Org
               </button>
             )}
-
-            {/* Connect existing org button */}
-            <button
-              onClick={togglePicker}
-              className="flex items-center gap-1.5 px-3 py-1.5 rounded-md text-xs font-medium cursor-pointer border"
-              style={{
-                background: showPicker ? 'var(--cc-accent-glow)' : 'transparent',
-                borderColor: showPicker ? 'var(--cc-accent)' : 'var(--cc-border)',
-                color: showPicker ? 'var(--cc-accent)' : 'var(--cc-text-secondary)',
-              }}
-            >
-              <Link2 size={12} /> Connect Existing <ChevronDown size={12} />
+            <button onClick={togglePicker} className="cc-btn-secondary text-xs py-2 px-3">
+              <Link2 size={12} /> Connect existing <ChevronDown size={12} />
             </button>
           </>
         )}
