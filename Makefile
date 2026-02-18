@@ -53,8 +53,13 @@ submodule-pull:
 	@-git submodule update --init --remote --recursive || true
 	@echo "Submodules updated (any with local changes were left unchanged)."
 
-# Local PostgreSQL URL (override in env if needed)
-PG_URL ?= postgresql+asyncpg://postgres:postgres@localhost:5432
+# Local PostgreSQL: from .env (PG_URL or PG_USER/PG_PASSWORD/PG_HOST/PG_PORT) or default
+PG_URL_OVERRIDE := $(strip $(shell grep '^PG_URL=' .env 2>/dev/null | cut -d= -f2-))
+PG_USER := $(or $(strip $(shell grep '^PG_USER=' .env 2>/dev/null | cut -d= -f2-)),postgres)
+PG_PASSWORD := $(or $(strip $(shell grep '^PG_PASSWORD=' .env 2>/dev/null | cut -d= -f2-)),postgres)
+PG_HOST := $(or $(strip $(shell grep '^PG_HOST=' .env 2>/dev/null | cut -d= -f2-)),localhost)
+PG_PORT := $(or $(strip $(shell grep '^PG_PORT=' .env 2>/dev/null | cut -d= -f2-)),5432)
+PG_URL := $(or $(PG_URL_OVERRIDE),postgresql+asyncpg://$(PG_USER):$(PG_PASSWORD)@$(PG_HOST):$(PG_PORT))
 
 # Load ENCRYPTION_KEY from .env if present (needed by metrics-explorer)
 ENCRYPTION_KEY ?= $(shell grep '^ENCRYPTION_KEY=' .env 2>/dev/null | cut -d= -f2-)
@@ -76,10 +81,10 @@ ME_FE := $(if $(wildcard $(ME_ROOT)/frontend/node_modules/vite/package.json),$(M
 LE_FE := $(if $(wildcard $(LE_ROOT)/frontend/node_modules/vite/package.json),$(LE_ROOT)/frontend,$(CURDIR)/services/logs-explorer/frontend)
 FX_FE := $(if $(wildcard $(FX_ROOT)/frontend/node_modules/vite/package.json),$(FX_ROOT)/frontend,$(CURDIR)/services/fixai/frontend)
 
-# Ensure PostgreSQL databases exist (create if missing; idempotent)
+# Ensure PostgreSQL databases exist (create if missing; idempotent; uses PG_* from .env)
 ensure-dbs:
-	@for db in codecircle fixai code_parser metrics_explorer logs_explorer; do \
-	  PGDATABASE=postgres psql -U postgres -tc "SELECT 1 FROM pg_database WHERE datname = '$$db'" | grep -q 1 || (createdb -U postgres "$$db" 2>/dev/null && echo "Created database $$db" || true); \
+	@export PGPASSWORD="$(PG_PASSWORD)"; for db in codecircle fixai code_parser metrics_explorer logs_explorer; do \
+	  psql -h "$(PG_HOST)" -p "$(PG_PORT)" -U "$(PG_USER)" -tc "SELECT 1 FROM pg_database WHERE datname = '$$db'" | grep -q 1 || (createdb -h "$(PG_HOST)" -p "$(PG_PORT)" -U "$(PG_USER)" "$$db" 2>/dev/null && echo "Created database $$db" || true); \
 	done
 
 # Kill any processes already using CodeCircle dev ports (so make dev can restart cleanly)
@@ -135,7 +140,7 @@ dev: submodule-pull stop-dev ensure-dbs migrate ## Start all backends + all fron
 	( cd dashboard && npm run dev ) & \
 	wait
 
-dev-backends: stop-dev ensure-dbs ## Start only backend services (no frontends)
+dev-backends: stop-dev ensure-dbs migrate ## Start only backend services (no frontends)
 	@echo "Starting backend services only..."
 	@trap 'kill 0' EXIT; \
 	( cd $(CP_ROOT) && source venv/bin/activate && \

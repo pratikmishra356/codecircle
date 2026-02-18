@@ -133,10 +133,21 @@ make logs       # Tail all service logs
 make logs-fixai # Tail specific service logs
 make status     # Show service status
 make setup      # Local dev setup (venvs, deps, DBs)
-make dev        # Start local dev servers
+make dev        # Start local dev servers (pulls submodules first)
+make submodule-pull   # Fetch latest from submodule remotes only
 make clean      # Stop and remove all data
 make migrate    # Run database migrations
 ```
+
+### Getting new changes from remote (submodules)
+
+We **prefer remote**: setup and `make dev` both try to use the latest from each submodule’s remote. If a submodule has **local or uncommitted changes**, that submodule is left unchanged (local fallback) so setup and dev don’t fail.
+
+- **Normal case** — Run `make dev`. It runs `submodule-pull` first, so you get the latest from fixai, code-parser, etc. Restart `make dev` after pulling to run the new code.
+- **Update submodules only** — Run `make submodule-pull`. Then start or restart `make dev`.
+- **Submodule has local changes** — Git will skip updating that submodule. To take remote changes anyway either:
+  - Stash or commit inside that submodule (`cd services/fixai && git stash` or `git add ... && git commit`), then from the repo root run `git submodule update --init --remote services/fixai`, or
+  - Discard local changes in that submodule (e.g. `cd services/fixai && git checkout -- . && git clean -fd`) then run `make submodule-pull` or `make dev`.
 
 ## Project Structure
 
