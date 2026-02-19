@@ -456,12 +456,12 @@ function ServiceSection({
 
   const isFixAI = svc.key === 'fixai';
 
-  // Check if other services are connected (needed to enable FixAI org creation)
   const otherServicesConnected = [
     workspace.service_ids.code_parser_org_id,
     workspace.service_ids.metrics_org_id,
     workspace.service_ids.logs_org_id,
   ].filter(Boolean).length;
+  const canCreateFixAI = otherServicesConnected === 3;
 
   async function loadOrgs() {
     setLoadingOrgs(true);
@@ -598,14 +598,21 @@ function ServiceSection({
         ) : (
           <>
             {isFixAI && (
-              <button
-                onClick={() => { setShowCreateForm(!showCreateForm); setShowPicker(false); }}
-                disabled={otherServicesConnected === 0}
-                className={showCreateForm ? 'cc-btn-primary text-xs py-2 px-3' : 'cc-btn-secondary text-xs py-2 px-3'}
-                title={otherServicesConnected === 0 ? 'Connect at least one other service first' : 'Create FixAI org'}
-              >
-                <Plus size={12} /> Create FixAI Org
-              </button>
+              <div className="relative group inline-block">
+                <button
+                  onClick={() => { if (canCreateFixAI) { setShowCreateForm(!showCreateForm); setShowPicker(false); } }}
+                  disabled={!canCreateFixAI}
+                  className={showCreateForm ? 'cc-btn-primary text-xs py-2 px-3' : 'cc-btn-secondary text-xs py-2 px-3'}
+                >
+                  <Plus size={12} /> Create FixAI Org
+                </button>
+                {!canCreateFixAI && (
+                  <div className="absolute bottom-full left-1/2 -translate-x-1/2 mb-2 px-3 py-1.5 rounded-lg text-xs whitespace-nowrap opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none z-30"
+                    style={{ background: 'var(--cc-text)', color: 'var(--cc-surface)' }}>
+                    Connect Code Parser, Metrics, and Logs first ({otherServicesConnected}/3)
+                  </div>
+                )}
+              </div>
             )}
             <button onClick={togglePicker} className="cc-btn-secondary text-xs py-2 px-3">
               <Link2 size={12} /> Connect existing <ChevronDown size={12} />
