@@ -1,4 +1,4 @@
-.PHONY: help up down build logs setup dev dev-backends clean status stop-dev migrate
+.PHONY: help up down build logs setup dev dev-backends clean clean-local status stop-dev migrate
 
 SHELL := /bin/bash
 
@@ -42,6 +42,28 @@ status: ## Show service status
 
 clean: ## Stop services and remove volumes (deletes data)
 	docker-compose down -v
+
+clean-local: stop-dev ## Remove local dev artifacts: DBs, node_modules, venvs, service .env
+	@echo "Dropping databases..."
+	@export PGPASSWORD="$(DB_PASSWORD)"; \
+	for db in codecircle fixai code_parser metrics_explorer logs_explorer; do \
+	  dropdb -h "$(DB_HOST)" -p "$(DB_PORT)" -U "$(DB_USER)" "$$db" 2>/dev/null && echo "  Dropped $$db" || true; \
+	done; unset PGPASSWORD
+	@echo "Removing node_modules..."
+	@rm -rf dashboard/node_modules
+	@rm -rf services/code-parser/frontend/node_modules services/metrics-explorer/frontend/node_modules
+	@rm -rf services/logs-explorer/frontend/node_modules services/fixai/frontend/node_modules
+	@echo "Removing Python venvs..."
+	@rm -rf platform/venv services/fixai/backend/venv services/metrics-explorer/venv
+	@rm -rf services/logs-explorer/backend/venv services/code-parser/venv
+	@echo "Removing service .env files..."
+	@rm -f platform/.env services/fixai/backend/.env services/metrics-explorer/.env
+	@rm -f services/logs-explorer/backend/.env services/code-parser/.env
+	@echo "Removing Python cache..."
+	@find . -type d -name __pycache__ -exec rm -rf {} + 2>/dev/null; true
+	@find . -type d -name "*.egg-info" -exec rm -rf {} + 2>/dev/null; true
+	@find . -type d -name .pytest_cache -exec rm -rf {} + 2>/dev/null; true
+	@echo "clean-local done. Run 'make setup' to set up again."
 
 # ─── Local Development ───────────────────────────────────────────────
 

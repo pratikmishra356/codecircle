@@ -189,7 +189,7 @@ function SetupSteps({
   aiKeySet: boolean;
   onRefresh: () => void;
 }) {
-  const [expanded, setExpanded] = useState(false);
+  const [expanded, setExpanded] = useState(false); // Collapsible; default collapsed
   const step2Done = SETUP_STEPS[1].getDone!(workspace);
   const step2Label = SETUP_STEPS[1].getLabel!(workspace);
   const step3Done = aiConfigLoaded && (SETUP_STEPS[2].getDone!(workspace, aiKeySet) ?? false);
